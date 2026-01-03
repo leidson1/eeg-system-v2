@@ -112,7 +112,7 @@ export default function MigratePage() {
             data_pedido: legacy.dataPedido || new Date().toISOString().split('T')[0],
             tipo_paciente: tipoPaciente,
             medico_solicitante: legacy.medicoSolicitante || null,
-            medico_executor: legacy.medicaExecutora || null,
+            medica_executora: legacy.medicaExecutora || null,
             necessidade_sedacao: sedacao,
             prioridade: Math.min(Math.max(prioridade, 1), 4),
             status: orderStatus,
