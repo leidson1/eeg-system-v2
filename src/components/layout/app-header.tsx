@@ -11,12 +11,29 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
+import { toast } from 'sonner'
 
 interface AppHeaderProps {
     title?: string
 }
 
 export function AppHeader({ title }: AppHeaderProps) {
+    const router = useRouter()
+    const supabase = createClient()
+
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut()
+            toast.success('Logout realizado com sucesso')
+            router.push('/login')
+            router.refresh()
+        } catch {
+            toast.error('Erro ao fazer logout')
+        }
+    }
+
     return (
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 print:hidden">
             {/* Page Title */}
@@ -31,10 +48,6 @@ export function AppHeader({ title }: AppHeaderProps) {
                 {/* Notifications */}
                 <Button variant="ghost" size="icon" className="relative">
                     <Bell className="h-5 w-5 text-slate-600" />
-                    {/* Notification badge - uncomment when needed */}
-                    {/* <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-xs text-white flex items-center justify-center">
-            3
-          </span> */}
                 </Button>
 
                 {/* User Menu */}
@@ -59,7 +72,7 @@ export function AppHeader({ title }: AppHeaderProps) {
                             <span>Perfil</span>
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem className="text-red-600">
+                        <DropdownMenuItem className="text-red-600" onClick={handleLogout}>
                             <LogOut className="mr-2 h-4 w-4" />
                             <span>Sair</span>
                         </DropdownMenuItem>

@@ -19,41 +19,11 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Search, Edit, History, UserX } from 'lucide-react'
+import { Plus, Search, Edit, History, UserX, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
-import { CIDADES_TOCANTINS } from '@/types'
-
-// Dados de demonstração
-const mockPatients = [
-    {
-        id: '1',
-        nome_completo: 'João Pedro Silva',
-        data_nascimento: '2020-03-15',
-        nome_responsavel: 'Maria Silva',
-        whatsapp: '(63) 99999-1111',
-        municipio: 'Palmas',
-        status: 'Ativo' as const,
-    },
-    {
-        id: '2',
-        nome_completo: 'Ana Clara Santos',
-        data_nascimento: '2019-07-22',
-        nome_responsavel: 'Carlos Santos',
-        whatsapp: '(63) 98888-2222',
-        municipio: 'Araguaína',
-        status: 'Ativo' as const,
-    },
-    {
-        id: '3',
-        nome_completo: 'Lucas Oliveira',
-        data_nascimento: '2021-01-10',
-        nome_responsavel: 'Fernanda Oliveira',
-        whatsapp: '(63) 97777-3333',
-        municipio: 'Gurupi',
-        status: 'Ativo' as const,
-    },
-]
+import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
+import { CIDADES_TOCANTINS, type Patient } from '@/types'
 
 function calculateAge(dob: string): string {
     const birthDate = new Date(dob + 'T00:00:00')
@@ -67,7 +37,7 @@ function calculateAge(dob: string): string {
     }
 
     if (years > 1) return `${years} anos`
-    if (years === 1) return `1 ano${months > 0 ? ` e ${months} meses` : ''}`
+    if (years === 1) return `1 ano${months > 0 ? ` e ${months}m` : ''}`
     if (months > 1) return `${months} meses`
     if (months === 1) return '1 mês'
     return 'Recém-nascido'
@@ -79,10 +49,43 @@ function formatDate(dateStr: string): string {
 }
 
 export default function PacientesPage() {
+    const [patients, setPatients] = useState<Patient[]>([])
+    const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [cityFilter, setCityFilter] = useState('all')
 
-    const filteredPatients = mockPatients.filter(patient => {
+    useEffect(() => {
+        fetchPatients()
+    }, [])
+
+    const fetchPatients = async () => {
+        try {
+            const response = await fetch('/api/pacientes')
+            if (!response.ok) throw new Error('Erro ao carregar pacientes')
+            const data = await response.json()
+            setPatients(data)
+        } catch (error) {
+            toast.error('Erro ao carregar pacientes')
+            console.error(error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleInactivate = async (id: string, name: string) => {
+        if (!confirm(`Deseja inativar o paciente "${name}"?`)) return
+
+        try {
+            const response = await fetch(`/api/pacientes/${id}`, { method: 'DELETE' })
+            if (!response.ok) throw new Error('Erro ao inativar')
+            toast.success('Paciente inativado')
+            fetchPatients()
+        } catch {
+            toast.error('Erro ao inativar paciente')
+        }
+    }
+
+    const filteredPatients = patients.filter(patient => {
         const matchesSearch = searchTerm === '' ||
             patient.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
             patient.nome_responsavel.toLowerCase().includes(searchTerm.toLowerCase())
@@ -145,10 +148,18 @@ export default function PacientesPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredPatients.length === 0 ? (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={7} className="text-center py-8">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
+                                    </TableCell>
+                                </TableRow>
+                            ) : filteredPatients.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} className="text-center py-8 text-slate-500">
-                                        Nenhum paciente encontrado com os filtros atuais.
+                                        {patients.length === 0
+                                            ? 'Nenhum paciente cadastrado ainda.'
+                                            : 'Nenhum paciente encontrado com os filtros atuais.'}
                                     </TableCell>
                                 </TableRow>
                             ) : (
@@ -158,9 +169,9 @@ export default function PacientesPage() {
                                         <TableCell>{formatDate(patient.data_nascimento)}</TableCell>
                                         <TableCell>{calculateAge(patient.data_nascimento)}</TableCell>
                                         <TableCell>{patient.nome_responsavel}</TableCell>
-                                        <TableCell>{patient.whatsapp || 'N/D'}</TableCell>
+                                        <TableCell>{patient.whatsapp || (patient.telefones?.[0]) || 'N/D'}</TableCell>
                                         <TableCell>
-                                            <Badge variant="outline">{patient.municipio}</Badge>
+                                            {patient.municipio && <Badge variant="outline">{patient.municipio}</Badge>}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
@@ -170,7 +181,13 @@ export default function PacientesPage() {
                                                 <Button variant="ghost" size="sm" title="Histórico">
                                                     <History className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="sm" title="Inativar" className="text-red-600 hover:text-red-700">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Inativar"
+                                                    className="text-red-600 hover:text-red-700"
+                                                    onClick={() => handleInactivate(patient.id, patient.nome_completo)}
+                                                >
                                                     <UserX className="h-4 w-4" />
                                                 </Button>
                                             </div>

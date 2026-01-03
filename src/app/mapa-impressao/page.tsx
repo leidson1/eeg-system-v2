@@ -1,14 +1,12 @@
 'use client'
 
 import { AppHeader } from '@/components/layout'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Printer, Calendar } from 'lucide-react'
 import { useState } from 'react'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 
 // Dados de demonstração
 const mockSchedule = [
@@ -47,13 +45,31 @@ const mockSchedule = [
     },
 ]
 
+function formatDateBR(dateStr: string): string {
+    const date = new Date(dateStr + 'T00:00:00')
+    return date.toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric'
+    })
+}
+
+function getCurrentDateTime(): string {
+    return new Date().toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+}
+
 export default function MapaImpressaoPage() {
-    const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
     const [showPreview, setShowPreview] = useState(false)
 
-    const formattedDate = selectedDate
-        ? format(new Date(selectedDate + 'T00:00:00'), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })
-        : ''
+    const formattedDate = selectedDate ? formatDateBR(selectedDate) : ''
 
     return (
         <>
@@ -143,7 +159,7 @@ export default function MapaImpressaoPage() {
                         {/* Footer */}
                         <div className="mt-6 flex justify-between text-xs text-slate-500 print:mt-4">
                             <p>Legenda: INT=Internado, AMB=Ambulatório, S=Sim, N=Não</p>
-                            <p>Mapa gerado em: {format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}</p>
+                            <p>Mapa gerado em: {getCurrentDateTime()}</p>
                         </div>
                     </div>
                 )}

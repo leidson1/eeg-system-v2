@@ -19,47 +19,27 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Search, Edit, History, Archive, Filter } from 'lucide-react'
+import { Plus, Search, Edit, History, Archive, Filter, Loader2, CalendarCheck } from 'lucide-react'
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { PRIORITY_DESCRIPTIONS, PRIORITY_COLORS } from '@/types'
 
-// Dados de demonstração
-const mockOrders = [
-    {
-        id: '1',
-        patient_name: 'João Pedro Silva',
-        data_pedido: '2025-12-20',
-        prioridade: 3 as const,
-        status: 'Pendente' as const,
-        scheduled_date: null,
-        necessidade_sedacao: 'Sem' as const,
-        tipo_paciente: 'Ambulatorio' as const,
-        medico_solicitante: 'Dr. Ricardo Alves',
-    },
-    {
-        id: '2',
-        patient_name: 'Ana Clara Santos',
-        data_pedido: '2025-12-18',
-        prioridade: 1 as const,
-        status: 'Agendado' as const,
-        scheduled_date: '2026-01-05',
-        necessidade_sedacao: 'Com' as const,
-        tipo_paciente: 'Ambulatorio' as const,
-        medico_solicitante: 'Dra. Fernanda Lima',
-    },
-    {
-        id: '3',
-        patient_name: 'Lucas Oliveira',
-        data_pedido: '2025-12-15',
-        prioridade: 4 as const,
-        status: 'Pendente' as const,
-        scheduled_date: null,
-        necessidade_sedacao: 'Sem' as const,
-        tipo_paciente: 'Internado' as const,
-        medico_solicitante: 'Dr. Marcos Costa',
-    },
-]
+interface OrderWithPatient {
+    id: string
+    patient_id: string
+    status: string
+    prioridade: number
+    tipo_paciente: string
+    necessidade_sedacao: string
+    medico_solicitante: string | null
+    data_pedido: string
+    scheduled_date: string | null
+    patient: {
+        nome_completo: string
+        municipio: string | null
+    } | null
+}
 
 function formatDate(dateStr: string | null): string {
     if (!dateStr) return '-'
@@ -67,7 +47,7 @@ function formatDate(dateStr: string | null): string {
     return date.toLocaleDateString('pt-BR')
 }
 
-const statusColors = {
+const statusColors: Record<string, string> = {
     Pendente: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     Agendado: 'bg-blue-100 text-blue-800 border-blue-200',
     Concluido: 'bg-green-100 text-green-800 border-green-200',
@@ -75,15 +55,67 @@ const statusColors = {
 }
 
 export default function PedidosPage() {
+    const [orders, setOrders] = useState<OrderWithPatient[]>([])
+    const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [priorityFilter, setPriorityFilter] = useState('all')
     const [showFilters, setShowFilters] = useState(false)
 
-    const filteredOrders = mockOrders.filter(order => {
+    useEffect(() => {
+        fetchOrders()
+    }, [])
+
+    const fetchOrders = async () => {
+        try {
+            const response = await fetch('/api/pedidos')
+            if (!response.ok) throw new Error('Erro ao carregar pedidos')
+            const data = await response.json()
+            setOrders(data)
+        } catch (error) {
+            toast.error('Erro ao carregar pedidos')
+            console.error(error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleArchive = async (id: string) => {
+        if (!confirm('Deseja arquivar este pedido?')) return
+
+        try {
+            const response = await fetch(`/api/pedidos/${id}`, { method: 'DELETE' })
+            if (!response.ok) throw new Error('Erro ao arquivar')
+            toast.success('Pedido arquivado')
+            fetchOrders()
+        } catch {
+            toast.error('Erro ao arquivar pedido')
+        }
+    }
+
+    const handleSchedule = async (id: string) => {
+        const date = prompt('Digite a data do agendamento (AAAA-MM-DD):')
+        if (!date) return
+
+        try {
+            const response = await fetch(`/api/pedidos/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'Agendado', scheduled_date: date }),
+            })
+            if (!response.ok) throw new Error('Erro ao agendar')
+            toast.success('Pedido agendado!')
+            fetchOrders()
+        } catch {
+            toast.error('Erro ao agendar pedido')
+        }
+    }
+
+    const filteredOrders = orders.filter(order => {
+        const patientName = order.patient?.nome_completo || ''
         const matchesSearch = searchTerm === '' ||
-            order.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.medico_solicitante.toLowerCase().includes(searchTerm.toLowerCase())
+            patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.medico_solicitante || '').toLowerCase().includes(searchTerm.toLowerCase())
 
         const matchesStatus = statusFilter === 'all' || order.status === statusFilter
         const matchesPriority = priorityFilter === 'all' || order.prioridade.toString() === priorityFilter
@@ -184,27 +216,35 @@ export default function PedidosPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredOrders.length === 0 ? (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={9} className="text-center py-8">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
+                                    </TableCell>
+                                </TableRow>
+                            ) : filteredOrders.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={9} className="text-center py-8 text-slate-500">
-                                        Nenhum pedido encontrado com os filtros atuais.
+                                        {orders.length === 0
+                                            ? 'Nenhum pedido cadastrado ainda.'
+                                            : 'Nenhum pedido encontrado com os filtros atuais.'}
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 filteredOrders.map((order) => (
                                     <TableRow key={order.id} className="hover:bg-slate-50">
-                                        <TableCell className="font-medium">{order.patient_name}</TableCell>
+                                        <TableCell className="font-medium">{order.patient?.nome_completo || 'N/D'}</TableCell>
                                         <TableCell>{formatDate(order.data_pedido)}</TableCell>
                                         <TableCell>
                                             <Badge
-                                                className={`${PRIORITY_COLORS[order.prioridade]} text-white border-0`}
-                                                title={PRIORITY_DESCRIPTIONS[order.prioridade]}
+                                                className={`${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]} text-white border-0`}
+                                                title={PRIORITY_DESCRIPTIONS[order.prioridade as 1 | 2 | 3 | 4]}
                                             >
                                                 P{order.prioridade}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className={statusColors[order.status]}>
+                                            <Badge variant="outline" className={statusColors[order.status] || ''}>
                                                 {order.status}
                                             </Badge>
                                         </TableCell>
@@ -219,16 +259,33 @@ export default function PedidosPage() {
                                                 {order.tipo_paciente === 'Internado' ? 'INT' : 'AMB'}
                                             </span>
                                         </TableCell>
-                                        <TableCell className="text-sm">{order.medico_solicitante}</TableCell>
+                                        <TableCell className="text-sm">{order.medico_solicitante || '-'}</TableCell>
                                         <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
+                                            <div className="flex justify-end gap-1">
+                                                {order.status === 'Pendente' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        title="Agendar"
+                                                        className="text-blue-600"
+                                                        onClick={() => handleSchedule(order.id)}
+                                                    >
+                                                        <CalendarCheck className="h-4 w-4" />
+                                                    </Button>
+                                                )}
                                                 <Button variant="ghost" size="sm" title="Editar">
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
                                                 <Button variant="ghost" size="sm" title="Histórico">
                                                     <History className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="sm" title="Arquivar" className="text-orange-600">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Arquivar"
+                                                    className="text-orange-600"
+                                                    onClick={() => handleArchive(order.id)}
+                                                >
                                                     <Archive className="h-4 w-4" />
                                                 </Button>
                                             </div>

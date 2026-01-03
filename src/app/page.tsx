@@ -11,25 +11,46 @@ import {
   Plus,
   CalendarCheck,
   TrendingUp,
-  Clock
+  Loader2
 } from 'lucide-react'
 import Link from 'next/link'
 import { PRIORITY_COLORS } from '@/types'
+import { useState, useEffect } from 'react'
 
-// Dados de demonstração (serão substituídos por dados do Supabase)
-const mockStats = {
-  pendingTotal: 12,
-  pendingByPriority: { 1: 2, 2: 3, 3: 5, 4: 2 },
-  scheduledToday: 3,
-  scheduledNextWorkday: 4,
-  scheduledNext7Days: 15,
-  capacityToday: 4,
-  usedCapacityToday: 3,
-  totalPatients: 156,
+interface Stats {
+  pendingTotal: number
+  pendingByPriority: Record<number, number>
+  scheduledToday: number
+  scheduledNext7Days: number
+  capacityToday: number
+  usedCapacityToday: number
+  totalPatients: number
 }
 
 export default function DashboardPage() {
-  const availableToday = mockStats.capacityToday - mockStats.usedCapacityToday
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then(res => res.json())
+      .then(data => setStats(data))
+      .catch(err => console.error('Error loading stats:', err))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const availableToday = stats ? Math.max(0, stats.capacityToday - stats.usedCapacityToday) : 0
+
+  if (loading) {
+    return (
+      <>
+        <AppHeader title="Dashboard" />
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        </div>
+      </>
+    )
+  }
 
   return (
     <>
@@ -54,7 +75,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-orange-600">
-                {mockStats.pendingTotal}
+                {stats?.pendingTotal ?? 0}
               </div>
               <p className="text-xs text-slate-500 mt-1">
                 Aguardando agendamento
@@ -72,7 +93,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-2 mt-2">
-                {Object.entries(mockStats.pendingByPriority).map(([priority, count]) => (
+                {stats && Object.entries(stats.pendingByPriority).map(([priority, count]) => (
                   <div
                     key={priority}
                     className="flex flex-col items-center"
@@ -100,11 +121,11 @@ export default function DashboardPage() {
               <div className="space-y-1">
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Hoje</span>
-                  <span className="font-semibold text-blue-600">{mockStats.scheduledToday}</span>
+                  <span className="font-semibold text-blue-600">{stats?.scheduledToday ?? 0}</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-slate-600">Próx. 7 dias</span>
-                  <span className="font-semibold text-blue-600">{mockStats.scheduledNext7Days}</span>
+                  <span className="font-semibold text-blue-600">{stats?.scheduledNext7Days ?? 0}</span>
                 </div>
               </div>
             </CardContent>
@@ -120,7 +141,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-green-600">
-                {mockStats.usedCapacityToday}/{mockStats.capacityToday}
+                {stats?.usedCapacityToday ?? 0}/{stats?.capacityToday ?? 0}
               </div>
               <p className="text-xs text-slate-500 mt-1">
                 {availableToday} vaga{availableToday !== 1 ? 's' : ''} disponível{availableToday !== 1 ? 'is' : ''}
@@ -141,7 +162,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-indigo-600">
-                {mockStats.totalPatients}
+                {stats?.totalPatients ?? 0}
               </div>
               <p className="text-xs text-slate-500 mt-1">
                 Pacientes cadastrados
@@ -179,18 +200,6 @@ export default function DashboardPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* Info Banner */}
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-          <Clock className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-          <div>
-            <h4 className="font-medium text-amber-800">Configure o Supabase</h4>
-            <p className="text-sm text-amber-700 mt-1">
-              Para ver dados reais, configure as variáveis de ambiente do Supabase no arquivo{' '}
-              <code className="bg-amber-100 px-1 rounded">.env.local</code>
-            </p>
-          </div>
         </div>
       </div>
     </>
