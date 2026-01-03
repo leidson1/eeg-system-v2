@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { PRIORITY_DESCRIPTIONS, PRIORITY_COLORS } from '@/types'
+import { ScheduleModal } from '@/components/modals'
 
 interface OrderWithPatient {
     id: string
@@ -55,15 +56,22 @@ const statusColors: Record<string, string> = {
 }
 
 export default function PedidosPage() {
+    // Ler filtros da URL
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
     const initialSearch = searchParams?.get('paciente') || ''
+    const initialStatus = searchParams?.get('status') || 'all'
+    const initialPriority = searchParams?.get('prioridade') || 'all'
 
     const [orders, setOrders] = useState<OrderWithPatient[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState(initialSearch)
-    const [statusFilter, setStatusFilter] = useState('all')
-    const [priorityFilter, setPriorityFilter] = useState('all')
-    const [showFilters, setShowFilters] = useState(false)
+    const [statusFilter, setStatusFilter] = useState(initialStatus)
+    const [priorityFilter, setPriorityFilter] = useState(initialPriority)
+    const [showFilters, setShowFilters] = useState(initialStatus !== 'all' || initialPriority !== 'all')
+
+    // Modal de agendamento
+    const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
+    const [selectedOrder, setSelectedOrder] = useState<{ id: string; patientName: string } | null>(null)
 
     useEffect(() => {
         fetchOrders()
@@ -96,22 +104,26 @@ export default function PedidosPage() {
         }
     }
 
-    const handleSchedule = async (id: string) => {
-        const date = prompt('Digite a data do agendamento (AAAA-MM-DD):')
-        if (!date) return
+    const handleSchedule = (id: string, patientName: string) => {
+        setSelectedOrder({ id, patientName })
+        setScheduleModalOpen(true)
+    }
 
-        try {
-            const response = await fetch(`/api/pedidos/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'Agendado', scheduled_date: date }),
-            })
-            if (!response.ok) throw new Error('Erro ao agendar')
-            toast.success('Pedido agendado!')
-            fetchOrders()
-        } catch {
-            toast.error('Erro ao agendar pedido')
-        }
+    const handleConfirmSchedule = async (date: string, time: string) => {
+        if (!selectedOrder) return
+
+        const response = await fetch(`/api/pedidos/${selectedOrder.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                status: 'Agendado',
+                scheduled_date: date,
+                scheduled_time: time
+            }),
+        })
+        if (!response.ok) throw new Error('Erro ao agendar')
+        toast.success('Pedido agendado com sucesso!')
+        fetchOrders()
     }
 
     const filteredOrders = orders.filter(order => {
@@ -129,7 +141,14 @@ export default function PedidosPage() {
             order.id.toLowerCase().includes(searchLower)
 
         const matchesStatus = statusFilter === 'all' || order.status === statusFilter
-        const matchesPriority = priorityFilter === 'all' || order.prioridade.toString() === priorityFilter
+
+        // Suporte para filtro 'urgente' (P1 ou P2)
+        let matchesPriority = priorityFilter === 'all'
+        if (priorityFilter === 'urgente') {
+            matchesPriority = order.prioridade <= 2
+        } else if (priorityFilter !== 'all') {
+            matchesPriority = order.prioridade.toString() === priorityFilter
+        }
 
         return matchesSearch && matchesStatus && matchesPriority
     })
@@ -279,7 +298,7 @@ export default function PedidosPage() {
                                                         size="sm"
                                                         title="Agendar"
                                                         className="text-blue-600"
-                                                        onClick={() => handleSchedule(order.id)}
+                                                        onClick={() => handleSchedule(order.id, order.patient?.nome_completo || 'Paciente')}
                                                     >
                                                         <CalendarCheck className="h-4 w-4" />
                                                     </Button>
@@ -317,6 +336,19 @@ export default function PedidosPage() {
                     {filteredOrders.length} pedido(s) encontrado(s)
                 </p>
             </div>
+
+            {/* Modal de Agendamento */}
+            {selectedOrder && (
+                <ScheduleModal
+                    open={scheduleModalOpen}
+                    onClose={() => {
+                        setScheduleModalOpen(false)
+                        setSelectedOrder(null)
+                    }}
+                    onConfirm={handleConfirmSchedule}
+                    patientName={selectedOrder.patientName}
+                />
+            )}
         </>
     )
 }

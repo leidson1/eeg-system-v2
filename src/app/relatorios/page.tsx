@@ -224,11 +224,9 @@ export default function RelatoriosPage() {
         .map(([name, value]) => ({ name, value }))
 
     const handlePrint = () => {
-        setShowPrintView(true)
-        setTimeout(() => {
-            window.print()
-            setShowPrintView(false)
-        }, 100)
+        // Abrir página de impressão limpa em nova aba
+        const url = `/relatorio-impressao?inicio=${startDate}&fim=${endDate}`
+        window.open(url, '_blank')
     }
 
     const toggleSection = (key: keyof typeof showSections) => {

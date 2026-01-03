@@ -24,6 +24,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { CIDADES_TOCANTINS, type Patient } from '@/types'
+import { PatientOrdersModal } from '@/components/modals'
 
 function calculateAge(dob: string): string {
     const birthDate = new Date(dob + 'T00:00:00')
@@ -53,6 +54,10 @@ export default function PacientesPage() {
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
     const [cityFilter, setCityFilter] = useState('all')
+
+    // Modal de pedidos do paciente
+    const [ordersModalOpen, setOrdersModalOpen] = useState(false)
+    const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string } | null>(null)
 
     useEffect(() => {
         fetchPatients()
@@ -189,10 +194,16 @@ export default function PacientesPage() {
                                                         <Edit className="h-4 w-4" />
                                                     </Link>
                                                 </Button>
-                                                <Button variant="ghost" size="sm" title="Ver Pedidos" asChild>
-                                                    <Link href={`/pedidos?paciente=${patient.nome_completo}`}>
-                                                        <History className="h-4 w-4" />
-                                                    </Link>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Ver Pedidos"
+                                                    onClick={() => {
+                                                        setSelectedPatient({ id: patient.id, name: patient.nome_completo })
+                                                        setOrdersModalOpen(true)
+                                                    }}
+                                                >
+                                                    <History className="h-4 w-4" />
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
@@ -217,6 +228,19 @@ export default function PacientesPage() {
                     {filteredPatients.length} paciente(s) encontrado(s)
                 </p>
             </div>
+
+            {/* Modal de Pedidos do Paciente */}
+            {selectedPatient && (
+                <PatientOrdersModal
+                    open={ordersModalOpen}
+                    onClose={() => {
+                        setOrdersModalOpen(false)
+                        setSelectedPatient(null)
+                    }}
+                    patientId={selectedPatient.id}
+                    patientName={selectedPatient.name}
+                />
+            )}
         </>
     )
 }

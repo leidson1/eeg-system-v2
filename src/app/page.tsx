@@ -108,6 +108,26 @@ export default function DashboardPage() {
   const urgentPending = orders.filter(o => o.status === 'Pendente' && (o.prioridade === 1 || o.prioridade === 2))
   const pendingOrders = orders.filter(o => o.status === 'Pendente')
 
+  // Próximos agendamentos (hoje e futuros) - ordenados por data
+  const upcomingScheduled = orders
+    .filter(o => o.scheduled_date && o.scheduled_date >= today && o.status === 'Agendado')
+    .sort((a, b) => {
+      const dateA = a.scheduled_date + (a.scheduled_time || '00:00')
+      const dateB = b.scheduled_date + (b.scheduled_time || '00:00')
+      return dateA.localeCompare(dateB)
+    })
+
+  // Agrupar próximos agendamentos por data
+  const groupedUpcoming = upcomingScheduled.reduce((acc, order) => {
+    const date = order.scheduled_date || 'sem-data'
+    if (!acc[date]) acc[date] = []
+    acc[date].push(order)
+    return acc
+  }, {} as Record<string, Order[]>)
+
+  // Próximas datas com agendamentos (máximo 5 datas)
+  const upcomingDates = Object.keys(groupedUpcoming).slice(0, 5)
+
   // Priority breakdown for pending orders
   const priorityBreakdown = pendingOrders.reduce((acc, o) => {
     acc[o.prioridade] = (acc[o.prioridade] || 0) + 1
@@ -271,13 +291,16 @@ export default function DashboardPage() {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Today's Schedule - Full List */}
+          {/* Próximos Agendamentos */}
           <Card className="lg:col-span-2">
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-5 w-5 text-blue-500" />
-                  Agenda de Hoje
+                  Próximos Agendamentos
+                  {upcomingScheduled.length > 0 && (
+                    <Badge variant="secondary">{upcomingScheduled.length}</Badge>
+                  )}
                 </CardTitle>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" asChild>
@@ -295,52 +318,60 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {todayScheduled.length === 0 && todayCompleted.length === 0 ? (
+              {upcomingScheduled.length === 0 ? (
                 <div className="text-center py-8 text-slate-400">
                   <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum exame agendado para hoje</p>
+                  <p>Nenhum exame agendado</p>
                   <Button variant="link" asChild className="mt-2">
                     <Link href="/pedidos">Agendar pedidos pendentes</Link>
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {[...todayCompleted, ...todayScheduled]
-                    .sort((a, b) => (a.scheduled_time || '').localeCompare(b.scheduled_time || ''))
-                    .map((order) => {
-                      const isCompleted = order.status === 'Concluido' || order.status === 'Concluído'
-                      return (
-                        <div
-                          key={order.id}
-                          className={`flex items-center justify-between p-3 rounded-lg transition-colors ${isCompleted
-                              ? 'bg-green-50 border border-green-200'
-                              : 'bg-slate-50 hover:bg-slate-100'
-                            }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-12 text-center font-mono font-semibold ${isCompleted ? 'text-green-600' : 'text-slate-700'}`}>
-                              {order.scheduled_time || '--:--'}
-                            </div>
-                            <div className={`w-2 h-8 rounded-full ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`} />
-                            <div>
-                              <p className={`font-medium ${isCompleted ? 'line-through text-green-700' : ''}`}>
-                                {order.patient?.nome_completo || 'N/D'}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-slate-500">
-                                <span>{order.tipo_paciente === 'Internado' ? '🏥 INT' : '🚶 AMB'}</span>
-                                {order.necessidade_sedacao === 'Com' && <span>💊 Sedação</span>}
-                                {order.patient?.municipio && <span>📍 {order.patient.municipio}</span>}
+                <div className="space-y-4">
+                  {upcomingDates.map((date) => {
+                    const dateOrders = groupedUpcoming[date] || []
+                    const isToday = date === today
+                    const dateObj = new Date(date + 'T00:00:00')
+                    const dateLabel = isToday
+                      ? 'Hoje'
+                      : dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })
+
+                    return (
+                      <div key={date}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge
+                            variant={isToday ? 'default' : 'outline'}
+                            className={isToday ? 'bg-blue-600' : ''}
+                          >
+                            {dateLabel}
+                          </Badge>
+                          <span className="text-sm text-slate-500">
+                            {dateOrders.length} exame{dateOrders.length > 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="space-y-2 pl-2 border-l-2 border-blue-200">
+                          {dateOrders.slice(0, 4).map((order) => (
+                            <div
+                              key={order.id}
+                              className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 text-center font-mono font-semibold text-slate-700">
+                                  {order.scheduled_time || '--:--'}
+                                </div>
+                                <div className={`w-2 h-6 rounded-full ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`} />
+                                <div>
+                                  <p className="font-medium text-sm">
+                                    {order.patient?.nome_completo || 'N/D'}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                                    <span>{order.tipo_paciente === 'Internado' ? '🏥' : '🚶'}</span>
+                                    {order.necessidade_sedacao === 'Com' && <span>💊</span>}
+                                    {order.patient?.municipio && <span>📍 {order.patient.municipio}</span>}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {isCompleted ? (
-                              <Badge className="bg-green-500">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Concluído
-                              </Badge>
-                            ) : (
-                              <>
+                              <div className="flex items-center gap-1">
                                 {order.patient?.whatsapp && (
                                   <Button size="sm" variant="ghost" asChild>
                                     <a href={`https://wa.me/55${order.patient.whatsapp.replace(/\D/g, '')}`} target="_blank">
@@ -348,17 +379,23 @@ export default function DashboardPage() {
                                     </a>
                                   </Button>
                                 )}
-                                <Button size="sm" variant="outline" asChild>
+                                <Button size="sm" variant="ghost" asChild>
                                   <Link href={`/pedidos/${order.id}/editar`}>
-                                    Detalhes
+                                    <ChevronRight className="h-4 w-4" />
                                   </Link>
                                 </Button>
-                              </>
-                            )}
-                          </div>
+                              </div>
+                            </div>
+                          ))}
+                          {dateOrders.length > 4 && (
+                            <p className="text-xs text-slate-500 pl-2">
+                              + {dateOrders.length - 4} mais agendados
+                            </p>
+                          )}
                         </div>
-                      )
-                    })}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
@@ -447,8 +484,8 @@ export default function DashboardPage() {
                     ))}
                     {urgentPending.length > 4 && (
                       <Button variant="link" size="sm" asChild className="w-full">
-                        <Link href="/pedidos">
-                          Ver mais {urgentPending.length - 4}...
+                        <Link href="/pedidos?status=Pendente&prioridade=urgente">
+                          Ver mais {urgentPending.length - 4} urgentes...
                         </Link>
                       </Button>
                     )}

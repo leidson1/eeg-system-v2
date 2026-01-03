@@ -31,8 +31,10 @@ interface ScheduledOrder {
 }
 
 export default function AgendamentosPage() {
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+    const today = new Date().toISOString().split('T')[0]
+    const [selectedDate, setSelectedDate] = useState(today)
     const [orders, setOrders] = useState<ScheduledOrder[]>([])
+    const [allScheduledDates, setAllScheduledDates] = useState<string[]>([])
     const [loading, setLoading] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
 
@@ -45,6 +47,36 @@ export default function AgendamentosPage() {
     useEffect(() => {
         fetchOrders()
     }, [selectedDate])
+
+    useEffect(() => {
+        // Buscar todas as datas com agendamentos futuros (uma vez ao carregar)
+        const fetchAllDates = async () => {
+            try {
+                const response = await fetch(`/api/pedidos?status=Agendado`)
+                if (!response.ok) return
+                const data = await response.json()
+
+                // Extrair datas únicas que são >= hoje
+                const dates = [...new Set(
+                    data
+                        .filter((o: { scheduled_date: string }) => o.scheduled_date && o.scheduled_date >= today)
+                        .map((o: { scheduled_date: string }) => o.scheduled_date)
+                )] as string[]
+
+                // Ordenar datas
+                dates.sort()
+                setAllScheduledDates(dates)
+
+                // Se hoje não tem agendamentos, ir para a próxima data
+                if (dates.length > 0 && !dates.includes(today)) {
+                    setSelectedDate(dates[0])
+                }
+            } catch {
+                // Silently fail
+            }
+        }
+        fetchAllDates()
+    }, [])
 
     const fetchOrders = async () => {
         setLoading(true)
@@ -109,6 +141,41 @@ export default function AgendamentosPage() {
             <AppHeader title="Agendamentos" />
 
             <div className="p-6 space-y-6">
+                {/* Quick Date Navigation */}
+                {allScheduledDates.length > 0 && (
+                    <Card>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm text-slate-600">
+                                Próximas datas com agendamentos
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex flex-wrap gap-2">
+                                {allScheduledDates.slice(0, 8).map((date) => {
+                                    const dateObj = new Date(date + 'T00:00:00')
+                                    const isToday = date === today
+                                    const isSelected = date === selectedDate
+                                    const label = isToday
+                                        ? 'Hoje'
+                                        : dateObj.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
+
+                                    return (
+                                        <Button
+                                            key={date}
+                                            variant={isSelected ? 'default' : 'outline'}
+                                            size="sm"
+                                            onClick={() => setSelectedDate(date)}
+                                            className={isToday && !isSelected ? 'border-blue-400' : ''}
+                                        >
+                                            {label}
+                                        </Button>
+                                    )
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 {/* Date Selector and Search */}
                 <Card>
                     <CardContent className="pt-6">
