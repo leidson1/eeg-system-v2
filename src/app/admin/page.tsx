@@ -222,6 +222,10 @@ export default function AdminPage() {
                             <Download className="h-4 w-4 mr-2" />
                             Backup
                         </TabsTrigger>
+                        <TabsTrigger value="migrate" className="data-[state=active]:bg-slate-700">
+                            <Upload className="h-4 w-4 mr-2" />
+                            Migrar
+                        </TabsTrigger>
                     </TabsList>
 
                     {/* Users Tab */}
@@ -361,6 +365,32 @@ export default function AdminPage() {
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+
+                    {/* Migrate Tab */}
+                    <TabsContent value="migrate" className="space-y-4">
+                        <Card className="bg-slate-800 border-slate-700">
+                            <CardHeader>
+                                <CardTitle className="text-white flex items-center gap-2">
+                                    <Upload className="h-5 w-5 text-purple-500" />
+                                    Migrar Sistema Antigo
+                                </CardTitle>
+                                <CardDescription className="text-slate-400">
+                                    Importe dados do backup JSON do sistema antigo (localStorage)
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <p className="text-sm text-slate-400">
+                                    Use esta ferramenta para importar pacientes e pedidos do sistema antigo para o novo banco de dados.
+                                </p>
+                                <Button asChild className="w-full">
+                                    <Link href="/admin/migrate">
+                                        <Upload className="mr-2 h-4 w-4" />
+                                        Abrir Ferramenta de Migração
+                                    </Link>
+                                </Button>
+                            </CardContent>
+                        </Card>
                     </TabsContent>
                 </Tabs>
 
