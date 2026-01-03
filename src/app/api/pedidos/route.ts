@@ -10,6 +10,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url)
         const status = searchParams.get('status')
         const archived = searchParams.get('archived')
+        const patientId = searchParams.get('patient_id')
 
         let query = supabase
             .from('orders')
@@ -18,6 +19,11 @@ export async function GET(request: Request) {
         patient:patients(id, nome_completo, data_nascimento, nome_responsavel, municipio, whatsapp, telefones)
       `)
             .order('created_at', { ascending: false })
+
+        // Filter by patient_id if provided
+        if (patientId) {
+            query = query.eq('patient_id', patientId)
+        }
 
         // Filter by status or archived
         if (archived === 'true') {

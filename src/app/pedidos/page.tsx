@@ -24,7 +24,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { PRIORITY_DESCRIPTIONS, PRIORITY_COLORS } from '@/types'
-import { ScheduleModal } from '@/components/modals'
+import { ScheduleModal, OrderDetailsModal } from '@/components/modals'
 
 interface OrderWithPatient {
     id: string
@@ -56,22 +56,38 @@ const statusColors: Record<string, string> = {
 }
 
 export default function PedidosPage() {
-    // Ler filtros da URL
-    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-    const initialSearch = searchParams?.get('paciente') || ''
-    const initialStatus = searchParams?.get('status') || 'all'
-    const initialPriority = searchParams?.get('prioridade') || 'all'
-
     const [orders, setOrders] = useState<OrderWithPatient[]>([])
     const [loading, setLoading] = useState(true)
-    const [searchTerm, setSearchTerm] = useState(initialSearch)
-    const [statusFilter, setStatusFilter] = useState(initialStatus)
-    const [priorityFilter, setPriorityFilter] = useState(initialPriority)
-    const [showFilters, setShowFilters] = useState(initialStatus !== 'all' || initialPriority !== 'all')
+    const [searchTerm, setSearchTerm] = useState('')
+    const [statusFilter, setStatusFilter] = useState('all')
+    const [priorityFilter, setPriorityFilter] = useState('all')
+    const [showFilters, setShowFilters] = useState(false)
 
     // Modal de agendamento
     const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
     const [selectedOrder, setSelectedOrder] = useState<{ id: string; patientName: string } | null>(null)
+
+    // Modal de detalhes
+    const [detailsModalOpen, setDetailsModalOpen] = useState(false)
+    const [selectedOrderDetails, setSelectedOrderDetails] = useState<OrderWithPatient | null>(null)
+
+    // Ler filtros da URL no primeiro render (client-side)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search)
+        const paciente = params.get('paciente')
+        const status = params.get('status')
+        const prioridade = params.get('prioridade')
+
+        if (paciente) setSearchTerm(paciente)
+        if (status) {
+            setStatusFilter(status)
+            setShowFilters(true)
+        }
+        if (prioridade) {
+            setPriorityFilter(prioridade)
+            setShowFilters(true)
+        }
+    }, [])
 
     useEffect(() => {
         fetchOrders()
@@ -303,14 +319,20 @@ export default function PedidosPage() {
                                                         <CalendarCheck className="h-4 w-4" />
                                                     </Button>
                                                 )}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Ver Detalhes"
+                                                    onClick={() => {
+                                                        setSelectedOrderDetails(order)
+                                                        setDetailsModalOpen(true)
+                                                    }}
+                                                >
+                                                    <History className="h-4 w-4" />
+                                                </Button>
                                                 <Button variant="ghost" size="sm" title="Editar" asChild>
                                                     <Link href={`/pedidos/${order.id}/editar`}>
                                                         <Edit className="h-4 w-4" />
-                                                    </Link>
-                                                </Button>
-                                                <Button variant="ghost" size="sm" title="Detalhes" asChild>
-                                                    <Link href={`/pedidos/${order.id}/editar`}>
-                                                        <History className="h-4 w-4" />
                                                     </Link>
                                                 </Button>
                                                 <Button
@@ -349,6 +371,16 @@ export default function PedidosPage() {
                     patientName={selectedOrder.patientName}
                 />
             )}
+
+            {/* Modal de Detalhes */}
+            <OrderDetailsModal
+                open={detailsModalOpen}
+                onClose={() => {
+                    setDetailsModalOpen(false)
+                    setSelectedOrderDetails(null)
+                }}
+                order={selectedOrderDetails}
+            />
         </>
     )
 }

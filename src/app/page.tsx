@@ -290,107 +290,131 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Próximos Agendamentos */}
-          <Card className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Agenda de Hoje */}
+          <Card>
             <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-blue-500" />
-                  Próximos Agendamentos
-                  {upcomingScheduled.length > 0 && (
-                    <Badge variant="secondary">{upcomingScheduled.length}</Badge>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Calendar className="h-5 w-5 text-green-500" />
+                  Agenda de Hoje
+                  {todayScheduled.length > 0 && (
+                    <Badge className="bg-green-500">{todayScheduled.length}</Badge>
                   )}
                 </CardTitle>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/mapa-impressao">
-                      <Printer className="h-4 w-4 mr-1" />
-                      Mapa
-                    </Link>
-                  </Button>
-                  <Button size="sm" asChild>
-                    <Link href="/agendamentos">
-                      Ver Todos <ChevronRight className="h-4 w-4 ml-1" />
-                    </Link>
-                  </Button>
-                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/mapa-impressao">
+                    <Printer className="h-4 w-4 mr-1" />
+                    Mapa
+                  </Link>
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {upcomingScheduled.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhum exame agendado</p>
-                  <Button variant="link" asChild className="mt-2">
+              {todayScheduled.length === 0 ? (
+                <div className="text-center py-6 text-slate-400">
+                  <Calendar className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Nenhum exame agendado para hoje</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {todayScheduled.map((order) => (
+                    <div
+                      key={order.id}
+                      className="flex items-center justify-between p-2 rounded-lg bg-green-50 hover:bg-green-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className="w-12 text-center font-mono font-semibold text-green-700">
+                          {order.scheduled_time || '--:--'}
+                        </div>
+                        <div className={`w-2 h-6 rounded-full ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`} />
+                        <div>
+                          <p className="font-medium text-sm">{order.patient?.nome_completo || 'N/D'}</p>
+                          <div className="flex items-center gap-1 text-xs text-slate-500">
+                            <span>{order.tipo_paciente === 'Internado' ? '🏥' : '🚶'}</span>
+                            {order.necessidade_sedacao === 'Com' && <span>💊</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {order.patient?.whatsapp && (
+                          <Button size="sm" variant="ghost" asChild>
+                            <a href={`https://wa.me/55${order.patient.whatsapp.replace(/\D/g, '')}`} target="_blank">
+                              <Phone className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/pedidos/${order.id}/editar`}>
+                            <ChevronRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Próximos Agendamentos (dias futuros) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CalendarCheck className="h-5 w-5 text-blue-500" />
+                  Próximos Dias
+                  {upcomingScheduled.filter(o => o.scheduled_date !== today).length > 0 && (
+                    <Badge variant="secondary">
+                      {upcomingScheduled.filter(o => o.scheduled_date !== today).length}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <Button size="sm" asChild>
+                  <Link href="/agendamentos">
+                    Ver Todos <ChevronRight className="h-4 w-4 ml-1" />
+                  </Link>
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {upcomingDates.filter(d => d !== today).length === 0 ? (
+                <div className="text-center py-6 text-slate-400">
+                  <CalendarCheck className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">Nenhum exame nos próximos dias</p>
+                  <Button variant="link" asChild className="mt-2 text-sm">
                     <Link href="/pedidos">Agendar pedidos pendentes</Link>
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {upcomingDates.map((date) => {
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {upcomingDates.filter(d => d !== today).slice(0, 4).map((date) => {
                     const dateOrders = groupedUpcoming[date] || []
-                    const isToday = date === today
                     const dateObj = new Date(date + 'T00:00:00')
-                    const dateLabel = isToday
-                      ? 'Hoje'
-                      : dateObj.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' })
+                    const dateLabel = dateObj.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' })
 
                     return (
-                      <div key={date}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge
-                            variant={isToday ? 'default' : 'outline'}
-                            className={isToday ? 'bg-blue-600' : ''}
-                          >
-                            {dateLabel}
-                          </Badge>
-                          <span className="text-sm text-slate-500">
+                      <div key={date} className="p-2 rounded-lg bg-slate-50">
+                        <div className="flex items-center justify-between mb-1">
+                          <Badge variant="outline">{dateLabel}</Badge>
+                          <span className="text-xs text-slate-500">
                             {dateOrders.length} exame{dateOrders.length > 1 ? 's' : ''}
                           </span>
                         </div>
-                        <div className="space-y-2 pl-2 border-l-2 border-blue-200">
-                          {dateOrders.slice(0, 4).map((order) => (
-                            <div
-                              key={order.id}
-                              className="flex items-center justify-between p-2 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 text-center font-mono font-semibold text-slate-700">
-                                  {order.scheduled_time || '--:--'}
-                                </div>
-                                <div className={`w-2 h-6 rounded-full ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`} />
-                                <div>
-                                  <p className="font-medium text-sm">
-                                    {order.patient?.nome_completo || 'N/D'}
-                                  </p>
-                                  <div className="flex items-center gap-2 text-xs text-slate-500">
-                                    <span>{order.tipo_paciente === 'Internado' ? '🏥' : '🚶'}</span>
-                                    {order.necessidade_sedacao === 'Com' && <span>💊</span>}
-                                    {order.patient?.municipio && <span>📍 {order.patient.municipio}</span>}
-                                  </div>
-                                </div>
+                        <div className="space-y-1">
+                          {dateOrders.slice(0, 2).map((order) => (
+                            <div key={order.id} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs">{order.scheduled_time || '--:--'}</span>
+                                <span className="truncate max-w-[120px]">{order.patient?.nome_completo || 'N/D'}</span>
                               </div>
-                              <div className="flex items-center gap-1">
-                                {order.patient?.whatsapp && (
-                                  <Button size="sm" variant="ghost" asChild>
-                                    <a href={`https://wa.me/55${order.patient.whatsapp.replace(/\D/g, '')}`} target="_blank">
-                                      <Phone className="h-4 w-4" />
-                                    </a>
-                                  </Button>
-                                )}
-                                <Button size="sm" variant="ghost" asChild>
-                                  <Link href={`/pedidos/${order.id}/editar`}>
-                                    <ChevronRight className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              </div>
+                              <Badge className={`text-xs ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`}>
+                                P{order.prioridade}
+                              </Badge>
                             </div>
                           ))}
-                          {dateOrders.length > 4 && (
-                            <p className="text-xs text-slate-500 pl-2">
-                              + {dateOrders.length - 4} mais agendados
-                            </p>
+                          {dateOrders.length > 2 && (
+                            <p className="text-xs text-slate-400">+ {dateOrders.length - 2} mais</p>
                           )}
                         </div>
                       </div>
@@ -400,137 +424,137 @@ export default function DashboardPage() {
               )}
             </CardContent>
           </Card>
+        </div>
 
-          {/* Right Column */}
-          <div className="space-y-4">
-            {/* Priority Breakdown */}
-            <Card>
+        {/* Second Row Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Priority Breakdown */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Fila por Prioridade
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {pendingOrders.length === 0 ? (
+                <div className="text-center py-4 text-green-600">
+                  <CheckCircle className="h-8 w-8 mx-auto mb-2" />
+                  <p className="text-sm">Nenhum pedido pendente!</p>
+                </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <div className="w-24 h-24">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={priorityData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={20}
+                          outerRadius={40}
+                          dataKey="value"
+                        >
+                          {priorityData.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    {[1, 2, 3, 4].map(p => (
+                      <div key={p} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${PRIORITY_COLORS[p as 1 | 2 | 3 | 4]}`} />
+                          <span>P{p}</span>
+                        </div>
+                        <span className="font-semibold">{priorityBreakdown[p] || 0}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Urgent Pending Quick List */}
+          {urgentPending.length > 0 && (
+            <Card className="border-l-4 border-l-red-500">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
-                  Fila por Prioridade
+                <CardTitle className="text-base flex items-center gap-2 text-red-600">
+                  <Bell className="h-4 w-4" />
+                  Urgentes Pendentes
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {pendingOrders.length === 0 ? (
-                  <div className="text-center py-4 text-green-600">
-                    <CheckCircle className="h-8 w-8 mx-auto mb-2" />
-                    <p className="text-sm">Nenhum pedido pendente!</p>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-4">
-                    <div className="w-24 h-24">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={priorityData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={20}
-                            outerRadius={40}
-                            dataKey="value"
-                          >
-                            {priorityData.map((_, index) => (
-                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      {[1, 2, 3, 4].map(p => (
-                        <div key={p} className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${PRIORITY_COLORS[p as 1 | 2 | 3 | 4]}`} />
-                            <span>P{p}</span>
-                          </div>
-                          <span className="font-semibold">{priorityBreakdown[p] || 0}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Urgent Pending Quick List */}
-            {urgentPending.length > 0 && (
-              <Card className="border-l-4 border-l-red-500">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2 text-red-600">
-                    <Bell className="h-4 w-4" />
-                    Urgentes Pendentes
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {urgentPending.slice(0, 4).map((order) => (
-                      <div key={order.id} className="flex items-center justify-between p-2 bg-red-50 rounded">
-                        <div className="flex items-center gap-2">
-                          <Badge className={PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}>
-                            P{order.prioridade}
-                          </Badge>
-                          <span className="text-sm truncate max-w-[120px]">
-                            {order.patient?.nome_completo || 'N/D'}
-                          </span>
-                        </div>
-                        <Button size="sm" variant="ghost" asChild>
-                          <Link href={`/pedidos/${order.id}/editar`}>
-                            <ArrowRight className="h-4 w-4" />
-                          </Link>
-                        </Button>
+                <div className="space-y-2">
+                  {urgentPending.slice(0, 4).map((order) => (
+                    <div key={order.id} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                      <div className="flex items-center gap-2">
+                        <Badge className={PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}>
+                          P{order.prioridade}
+                        </Badge>
+                        <span className="text-sm truncate max-w-[120px]">
+                          {order.patient?.nome_completo || 'N/D'}
+                        </span>
                       </div>
-                    ))}
-                    {urgentPending.length > 4 && (
-                      <Button variant="link" size="sm" asChild className="w-full">
-                        <Link href="/pedidos?status=Pendente&prioridade=urgente">
-                          Ver mais {urgentPending.length - 4} urgentes...
+                      <Button size="sm" variant="ghost" asChild>
+                        <Link href={`/pedidos/${order.id}/editar`}>
+                          <ArrowRight className="h-4 w-4" />
                         </Link>
                       </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Quick Links */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-slate-500" />
-                  Acesso Rápido
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Button variant="outline" className="w-full justify-start" asChild>
-                  <Link href="/pedidos">
-                    <ClipboardList className="h-4 w-4 mr-2" />
-                    Gerenciar Pedidos
-                    <Badge variant="secondary" className="ml-auto">{pendingOrders.length}</Badge>
-                  </Link>
-                </Button>
-                <Button variant="outline" className="w-full justify-start" asChild>
-                  <Link href="/pacientes">
-                    <Users className="h-4 w-4 mr-2" />
-                    Lista de Pacientes
-                  </Link>
-                </Button>
-                <Button variant="outline" className="w-full justify-start" asChild>
-                  <Link href="/relatorios">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Relatórios
-                  </Link>
-                </Button>
-                <Button variant="outline" className="w-full justify-start" asChild>
-                  <Link href="/arquivados">
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Arquivados
-                  </Link>
-                </Button>
+                    </div>
+                  ))}
+                  {urgentPending.length > 4 && (
+                    <Button variant="link" size="sm" asChild className="w-full">
+                      <Link href="/pedidos?status=Pendente&prioridade=urgente">
+                        Ver mais {urgentPending.length - 4} urgentes...
+                      </Link>
+                    </Button>
+                  )}
+                </div>
               </CardContent>
             </Card>
-          </div>
+          )}
+
+          {/* Quick Links */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Activity className="h-4 w-4 text-slate-500" />
+                Acesso Rápido
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/pedidos">
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Gerenciar Pedidos
+                  <Badge variant="secondary" className="ml-auto">{pendingOrders.length}</Badge>
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/pacientes">
+                  <Users className="h-4 w-4 mr-2" />
+                  Lista de Pacientes
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/relatorios">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Relatórios
+                </Link>
+              </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link href="/arquivados">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Arquivados
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>
