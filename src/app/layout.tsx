@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AppSidebar } from "@/components/layout/app-sidebar";
+import { LayoutWrapper } from "@/components/layout/layout-wrapper";
 import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({
@@ -22,12 +22,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.variable} font-sans antialiased bg-slate-50`}>
-        <div className="flex h-screen overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto">
-            {children}
-          </main>
-        </div>
+        <LayoutWrapper>
+          {children}
+        </LayoutWrapper>
         <Toaster position="bottom-right" richColors />
       </body>
     </html>
