@@ -86,9 +86,18 @@ export default function PacientesPage() {
     }
 
     const filteredPatients = patients.filter(patient => {
+        const searchLower = searchTerm.toLowerCase()
+
+        // Busca em todos os campos relevantes
         const matchesSearch = searchTerm === '' ||
-            patient.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            patient.nome_responsavel.toLowerCase().includes(searchTerm.toLowerCase())
+            patient.nome_completo.toLowerCase().includes(searchLower) ||
+            patient.nome_responsavel.toLowerCase().includes(searchLower) ||
+            (patient.whatsapp || '').toLowerCase().includes(searchLower) ||
+            (patient.email || '').toLowerCase().includes(searchLower) ||
+            (patient.cartao_sus || '').toLowerCase().includes(searchLower) ||
+            (patient.municipio || '').toLowerCase().includes(searchLower) ||
+            (patient.telefones || []).some(t => t.toLowerCase().includes(searchLower)) ||
+            (patient.observacoes || '').toLowerCase().includes(searchLower)
 
         const matchesCity = cityFilter === 'all' || patient.municipio === cityFilter
 
@@ -106,7 +115,7 @@ export default function PacientesPage() {
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
-                                placeholder="Buscar por nome ou responsável..."
+                                placeholder="Buscar por nome, telefone, município, SUS..."
                                 className="pl-10"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}

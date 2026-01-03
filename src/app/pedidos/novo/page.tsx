@@ -24,6 +24,8 @@ export default function NovoPedidoPage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
     const [patients, setPatients] = useState<Patient[]>([])
+    const [medicosSolicitantes, setMedicosSolicitantes] = useState<string[]>([])
+    const [showSuggestions, setShowSuggestions] = useState(false)
     const [formData, setFormData] = useState({
         patient_id: '',
         prioridade: '3',
@@ -40,7 +42,21 @@ export default function NovoPedidoPage() {
             .then(res => res.json())
             .then(data => setPatients(data))
             .catch(err => console.error('Error loading patients:', err))
+
+        // Load médicos solicitantes from localStorage
+        const saved = localStorage.getItem('eeg_team_config')
+        if (saved) {
+            const team = JSON.parse(saved)
+            if (team.solicitantes && Array.isArray(team.solicitantes)) {
+                setMedicosSolicitantes(team.solicitantes)
+            }
+        }
     }, [])
+
+    // Filtered suggestions based on input
+    const filteredSuggestions = medicosSolicitantes.filter(m =>
+        m.toLowerCase().includes(formData.medico_solicitante.toLowerCase())
+    )
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -187,14 +203,40 @@ export default function NovoPedidoPage() {
                                     </Select>
                                 </div>
 
-                                <div className="space-y-2 md:col-span-2">
+                                <div className="space-y-2 md:col-span-2 relative">
                                     <Label htmlFor="solicitante">Médico Solicitante</Label>
                                     <Input
                                         id="solicitante"
                                         value={formData.medico_solicitante}
-                                        onChange={(e) => setFormData({ ...formData, medico_solicitante: e.target.value })}
-                                        placeholder="Nome do médico que solicitou o exame"
+                                        onChange={(e) => {
+                                            setFormData({ ...formData, medico_solicitante: e.target.value })
+                                            setShowSuggestions(true)
+                                        }}
+                                        onFocus={() => setShowSuggestions(true)}
+                                        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                                        placeholder="Digite ou selecione o médico..."
+                                        autoComplete="off"
                                     />
+                                    {showSuggestions && filteredSuggestions.length > 0 && formData.medico_solicitante && (
+                                        <div className="absolute z-10 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                                            {filteredSuggestions.map((medico, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-2 hover:bg-slate-100 text-sm"
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, medico_solicitante: medico })
+                                                        setShowSuggestions(false)
+                                                    }}
+                                                >
+                                                    {medico}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <p className="text-xs text-slate-500">
+                                        Cadastre médicos em Configurações → Equipe
+                                    </p>
                                 </div>
 
                                 <div className="space-y-2 md:col-span-2">

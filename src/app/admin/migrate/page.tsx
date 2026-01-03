@@ -53,12 +53,13 @@ interface LegacyBackup {
     pedidos?: LegacyOrder[]
 }
 
-const BATCH_SIZE = 50 // Inserir 50 registros por vez
+const BATCH_SIZE = 25 // Menor para evitar rate limiting
 
 export default function MigratePage() {
     const [loading, setLoading] = useState(false)
     const [progress, setProgress] = useState(0)
     const [status, setStatus] = useState<string>('')
+    const [errorLog, setErrorLog] = useState<string[]>([])
     const [results, setResults] = useState<{
         patients: { success: number; errors: number }
         orders: { success: number; errors: number }
@@ -67,40 +68,40 @@ export default function MigratePage() {
     const supabase = createClient()
 
     // Map for old patient ID -> new patient UUID
-    const patientIdMap = new Map<string, string>()
+    const patientIdMapRef = useRef(new Map<string, string>())
 
+    // Converter paciente legado para novo formato
+    // IMPORTANTE: Campos devem corresponder EXATAMENTE ao schema do Supabase
     const processPatient = (legacy: LegacyPatient) => {
         const phones = legacy.telefonesResponsavel || []
         const whatsapp = legacy.whatsappResponsavel
-        const allPhones = whatsapp ? [...phones, whatsapp] : phones
-        const uniquePhones = [...new Set(allPhones)]
+        const allPhones = whatsapp ? [whatsapp, ...phones] : phones
+        const uniquePhones = [...new Set(allPhones.filter(Boolean))]
 
         return {
             nome_completo: legacy.nomeCompleto || 'Nome não informado',
-            data_nascimento: legacy.dataNascimento || '2000-01-01',
+            data_nascimento: legacy.dataNascimento || null,
             cartao_sus: legacy.cartaoSus || null,
-            nome_responsavel: legacy.nomeResponsavel || 'Não informado',
-            telefone_responsavel: uniquePhones[0] || null,
-            telefone_secundario: uniquePhones[1] || null,
-            whatsapp: whatsapp || uniquePhones[0] || null,
+            nome_responsavel: legacy.nomeResponsavel || null,
             telefones: uniquePhones,
-            email_responsavel: legacy.emailResponsavel || null,
+            whatsapp: whatsapp || uniquePhones[0] || null,
+            email: legacy.emailResponsavel || null,
             municipio: legacy.municipioProcedencia || null,
             observacoes: legacy.observacoesGerais || null,
             status: legacy.status === 'Inativo' ? 'Inativo' : 'Ativo',
         }
     }
 
-    const processOrder = (legacy: LegacyOrder, newPatientId: string | null) => {
+    const processOrder = (legacy: LegacyOrder, newPatientId: string) => {
         const prioridade = parseInt(legacy.prioridade) || 3
 
-        let status = 'Pendente'
+        let orderStatus = 'Pendente'
         if (legacy.status === 'Concluído' || legacy.status === 'Concluido') {
-            status = 'Concluido'
+            orderStatus = 'Concluido'
         } else if (legacy.status === 'Agendado') {
-            status = 'Agendado'
+            orderStatus = 'Agendado'
         } else if (legacy.status === 'Cancelado') {
-            status = 'Cancelado'
+            orderStatus = 'Cancelado'
         }
 
         const tipoPaciente = legacy.tipoPaciente === 'Internado' ? 'Internado' : 'Ambulatorio'
@@ -113,22 +114,13 @@ export default function MigratePage() {
             medico_solicitante: legacy.medicoSolicitante || null,
             medico_executor: legacy.medicaExecutora || null,
             necessidade_sedacao: sedacao,
-            prioridade: Math.min(Math.max(prioridade, 1), 4), // Garantir entre 1-4
-            status: status,
+            prioridade: Math.min(Math.max(prioridade, 1), 4),
+            status: orderStatus,
             observacoes_medicas: legacy.observacoesMedicas || null,
             scheduled_date: legacy.scheduledDate || null,
             scheduled_time: legacy.scheduledTime || null,
             data_conclusao: legacy.dataConclusao || null,
         }
-    }
-
-    // Helper para dividir array em chunks
-    const chunkArray = <T,>(array: T[], size: number): T[][] => {
-        const chunks: T[][] = []
-        for (let i = 0; i < array.length; i += size) {
-            chunks.push(array.slice(i, i + size))
-        }
-        return chunks
     }
 
     const handleMigrate = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,6 +130,10 @@ export default function MigratePage() {
         setLoading(true)
         setProgress(0)
         setResults(null)
+        setErrorLog([])
+        patientIdMapRef.current.clear()
+
+        const errors: string[] = []
 
         try {
             setStatus('Lendo arquivo...')
@@ -166,101 +162,109 @@ export default function MigratePage() {
             const orderResults = { success: 0, errors: 0 }
 
             // ==========================================
-            // FASE 1: IMPORTAR PACIENTES EM LOTES
+            // FASE 1: IMPORTAR PACIENTES UM A UM
+            // (mais lento, mas permite mapear IDs)
             // ==========================================
-            setStatus(`Preparando ${patients.length} pacientes...`)
+            setStatus(`Importando ${patients.length} pacientes...`)
 
-            // Preparar todos os pacientes com seus IDs originais
-            const patientData = patients.map(p => ({
-                legacy_id: p.id,
-                ...processPatient(p)
-            }))
+            for (let i = 0; i < patients.length; i++) {
+                const legacyPatient = patients[i]
 
-            // Dividir em chunks
-            const patientChunks = chunkArray(patientData, BATCH_SIZE)
-            let processedChunks = 0
+                try {
+                    const newPatient = processPatient(legacyPatient)
 
-            for (const chunk of patientChunks) {
-                setStatus(`Importando pacientes (lote ${processedChunks + 1}/${patientChunks.length})...`)
+                    const { data, error } = await supabase
+                        .from('patients')
+                        .insert(newPatient)
+                        .select('id')
+                        .single()
 
-                // Remover legacy_id antes de inserir
-                const toInsert = chunk.map(({ legacy_id, ...rest }) => rest)
-
-                const { data, error } = await supabase
-                    .from('patients')
-                    .insert(toInsert)
-                    .select('id')
-
-                if (error) {
-                    console.error('Batch patient error:', error)
-                    patientResults.errors += chunk.length
-                } else if (data) {
-                    // Mapear IDs
-                    data.forEach((record, index) => {
-                        patientIdMap.set(chunk[index].legacy_id, record.id)
-                    })
-                    patientResults.success += data.length
+                    if (error) {
+                        errors.push(`Paciente ${legacyPatient.nomeCompleto}: ${error.message}`)
+                        patientResults.errors++
+                    } else if (data) {
+                        patientIdMapRef.current.set(legacyPatient.id, data.id)
+                        patientResults.success++
+                    }
+                } catch (err) {
+                    errors.push(`Paciente ${legacyPatient.nomeCompleto}: ${err}`)
+                    patientResults.errors++
                 }
 
-                processedChunks++
-                setProgress(Math.round((processedChunks / patientChunks.length) * 50))
+                // Atualizar progresso a cada 10 pacientes
+                if (i % 10 === 0) {
+                    setProgress(Math.round((i / patients.length) * 50))
+                    setStatus(`Importando pacientes... ${i + 1}/${patients.length}`)
+                }
 
-                // Pequena pausa entre lotes para evitar rate limiting
-                await new Promise(resolve => setTimeout(resolve, 100))
+                // Pequena pausa a cada 20 para evitar rate limiting
+                if (i % 20 === 0 && i > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                }
             }
 
-            // ==========================================
-            // FASE 2: IMPORTAR PEDIDOS EM LOTES
-            // ==========================================
-            setStatus(`Preparando ${orders.length} pedidos...`)
+            setProgress(50)
+            console.log(`Pacientes: ${patientResults.success} sucesso, ${patientResults.errors} erros`)
 
-            // Preparar pedidos com novos IDs de pacientes
-            const orderData = orders.map(o => {
-                const newPatientId = patientIdMap.get(o.patientId)
+            // ==========================================
+            // FASE 2: IMPORTAR PEDIDOS
+            // ==========================================
+            setStatus(`Importando ${orders.length} pedidos...`)
+
+            for (let i = 0; i < orders.length; i++) {
+                const legacyOrder = orders[i]
+                const newPatientId = patientIdMapRef.current.get(legacyOrder.patientId)
+
                 if (!newPatientId) {
+                    errors.push(`Pedido ${legacyOrder.id}: paciente não encontrado (${legacyOrder.patientId})`)
                     orderResults.errors++
-                    return null
-                }
-                return processOrder(o, newPatientId)
-            }).filter(Boolean) as ReturnType<typeof processOrder>[]
-
-            // Dividir em chunks
-            const orderChunks = chunkArray(orderData, BATCH_SIZE)
-            processedChunks = 0
-
-            for (const chunk of orderChunks) {
-                setStatus(`Importando pedidos (lote ${processedChunks + 1}/${orderChunks.length})...`)
-
-                const { data, error } = await supabase
-                    .from('orders')
-                    .insert(chunk)
-                    .select('id')
-
-                if (error) {
-                    console.error('Batch order error:', error)
-                    orderResults.errors += chunk.length
-                } else if (data) {
-                    orderResults.success += data.length
+                    continue
                 }
 
-                processedChunks++
-                setProgress(50 + Math.round((processedChunks / orderChunks.length) * 50))
+                try {
+                    const newOrder = processOrder(legacyOrder, newPatientId)
 
-                // Pequena pausa entre lotes
-                await new Promise(resolve => setTimeout(resolve, 100))
+                    const { error } = await supabase
+                        .from('orders')
+                        .insert(newOrder)
+
+                    if (error) {
+                        errors.push(`Pedido ${legacyOrder.id}: ${error.message}`)
+                        orderResults.errors++
+                    } else {
+                        orderResults.success++
+                    }
+                } catch (err) {
+                    errors.push(`Pedido ${legacyOrder.id}: ${err}`)
+                    orderResults.errors++
+                }
+
+                // Atualizar progresso a cada 10 pedidos
+                if (i % 10 === 0) {
+                    setProgress(50 + Math.round((i / orders.length) * 50))
+                    setStatus(`Importando pedidos... ${i + 1}/${orders.length}`)
+                }
+
+                // Pequena pausa a cada 20 para evitar rate limiting
+                if (i % 20 === 0 && i > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                }
             }
 
             setResults({ patients: patientResults, orders: orderResults })
+            setErrorLog(errors.slice(0, 20)) // Mostrar primeiros 20 erros
             setStatus('Migração concluída!')
             setProgress(100)
 
             if (patientResults.success > 0 || orderResults.success > 0) {
                 toast.success(`Migração concluída! ${patientResults.success} pacientes e ${orderResults.success} pedidos importados.`)
+            } else if (errors.length > 0) {
+                toast.error('Migração falhou. Verifique os erros abaixo.')
             }
 
         } catch (err) {
             console.error('Migration error:', err)
-            toast.error('Erro durante a migração')
+            toast.error('Erro durante a migração: ' + (err instanceof Error ? err.message : 'Erro desconhecido'))
             setStatus('Erro: ' + (err instanceof Error ? err.message : 'Erro desconhecido'))
         } finally {
             setLoading(false)
@@ -274,6 +278,7 @@ export default function MigratePage() {
         setResults(null)
         setProgress(0)
         setStatus('')
+        setErrorLog([])
     }
 
     return (
@@ -325,7 +330,7 @@ export default function MigratePage() {
                                 </div>
                                 <p className="text-sm text-amber-200/80">
                                     Execute apenas uma vez. Os dados serão adicionados ao banco.
-                                    A migração usa lotes de {BATCH_SIZE} registros por vez.
+                                    A importação é feita um registro por vez para garantir o mapeamento de IDs.
                                 </p>
                             </div>
                         </div>
@@ -377,6 +382,22 @@ export default function MigratePage() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Error Log */}
+                                {errorLog.length > 0 && (
+                                    <div className="p-4 bg-red-900/30 border border-red-800 rounded-lg">
+                                        <p className="text-sm font-medium text-red-400 mb-2">
+                                            Primeiros erros encontrados:
+                                        </p>
+                                        <div className="max-h-40 overflow-y-auto space-y-1">
+                                            {errorLog.map((err, i) => (
+                                                <p key={i} className="text-xs text-red-300 font-mono">
+                                                    {err}
+                                                </p>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <Button
                                     variant="outline"

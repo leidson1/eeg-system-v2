@@ -4,6 +4,7 @@ import { AppHeader } from '@/components/layout'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import {
   ClipboardList,
   Calendar,
@@ -18,22 +19,25 @@ import {
   Activity,
   MapPin,
   ArrowRight,
-  Stethoscope
+  Stethoscope,
+  Phone,
+  Printer,
+  FileText,
+  Bell,
+  AlertCircle,
+  Timer,
+  UserCheck,
+  ChevronRight
 } from 'lucide-react'
 import Link from 'next/link'
-import { PRIORITY_COLORS } from '@/types'
+import { PRIORITY_COLORS, PRIORITY_DESCRIPTIONS } from '@/types'
 import { useState, useEffect } from 'react'
 import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
   ResponsiveContainer,
-  Legend
+  Tooltip
 } from 'recharts'
 
 interface Stats {
@@ -52,24 +56,23 @@ interface Order {
   scheduled_time: string | null
   prioridade: number
   tipo_paciente: string
+  necessidade_sedacao: string
   status: string
+  data_pedido: string
   patient: {
     nome_completo: string
     municipio: string | null
+    whatsapp: string | null
   } | null
 }
 
 const CHART_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e']
-const STATUS_COLORS = {
-  'Pendente': '#f97316',
-  'Agendado': '#3b82f6',
-  'Concluido': '#22c55e',
-}
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentTime, setCurrentTime] = useState(new Date())
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,51 +95,43 @@ export default function DashboardPage() {
     }
 
     fetchData()
+
+    // Update time every minute
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000)
+    return () => clearInterval(timer)
   }, [])
 
   // Calculate derived data
   const today = new Date().toISOString().split('T')[0]
   const todayScheduled = orders.filter(o => o.scheduled_date === today && o.status === 'Agendado')
+  const todayCompleted = orders.filter(o => o.scheduled_date === today && (o.status === 'Concluido' || o.status === 'Concluído'))
   const urgentPending = orders.filter(o => o.status === 'Pendente' && (o.prioridade === 1 || o.prioridade === 2))
+  const pendingOrders = orders.filter(o => o.status === 'Pendente')
+
+  // Priority breakdown for pending orders
+  const priorityBreakdown = pendingOrders.reduce((acc, o) => {
+    acc[o.prioridade] = (acc[o.prioridade] || 0) + 1
+    return acc
+  }, {} as Record<number, number>)
 
   // Chart data - Priority distribution
-  const priorityData = stats ? [
-    { name: 'P1 - Muito Urgente', value: stats.pendingByPriority[1] || 0 },
-    { name: 'P2 - Urgente', value: stats.pendingByPriority[2] || 0 },
-    { name: 'P3 - Regular', value: stats.pendingByPriority[3] || 0 },
-    { name: 'P4 - Eletivo', value: stats.pendingByPriority[4] || 0 },
-  ] : []
+  const priorityData = [
+    { name: 'P1', value: priorityBreakdown[1] || 0 },
+    { name: 'P2', value: priorityBreakdown[2] || 0 },
+    { name: 'P3', value: priorityBreakdown[3] || 0 },
+    { name: 'P4', value: priorityBreakdown[4] || 0 },
+  ].filter(d => d.value > 0)
 
-  // Chart data - Status distribution
-  const statusCounts = orders.reduce((acc, o) => {
-    acc[o.status] = (acc[o.status] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
-
-  const statusData = [
-    { name: 'Pendentes', value: statusCounts['Pendente'] || 0, fill: STATUS_COLORS['Pendente'] },
-    { name: 'Agendados', value: statusCounts['Agendado'] || 0, fill: STATUS_COLORS['Agendado'] },
-    { name: 'Concluídos', value: statusCounts['Concluido'] || 0, fill: STATUS_COLORS['Concluido'] },
-  ]
-
-  // Chart data - By municipio
-  const municipioCounts = orders
-    .filter(o => o.status === 'Pendente')
-    .reduce((acc, o) => {
-      const city = o.patient?.municipio || 'Não informado'
-      acc[city] = (acc[city] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-
-  const municipioData = Object.entries(municipioCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name, value]) => ({ name, value }))
-
-  const availableToday = stats ? Math.max(0, stats.capacityToday - stats.usedCapacityToday) : 0
-  const capacityPercentage = stats && stats.capacityToday > 0
-    ? Math.round((stats.usedCapacityToday / stats.capacityToday) * 100)
+  const todayProgress = todayScheduled.length + todayCompleted.length > 0
+    ? Math.round((todayCompleted.length / (todayScheduled.length + todayCompleted.length)) * 100)
     : 0
+
+  const greeting = () => {
+    const hour = currentTime.getHours()
+    if (hour < 12) return 'Bom dia'
+    if (hour < 18) return 'Boa tarde'
+    return 'Boa noite'
+  }
 
   if (loading) {
     return (
@@ -153,314 +148,352 @@ export default function DashboardPage() {
     <>
       <AppHeader title="Dashboard" />
 
-      <div className="p-6 space-y-6">
-        {/* Hero Section */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 rounded-2xl p-8 text-white shadow-xl">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4xIj48Y2lyY2xlIGN4PSIzMCIgY3k9IjMwIiByPSIyIi8+PC9nPjwvZz48L3N2Zz4=')] opacity-50"></div>
-          <div className="relative">
-            <div className="flex items-center gap-3 mb-2">
-              <Activity className="h-8 w-8" />
-              <h2 className="text-3xl font-bold">Sistema EEG Pediátrico</h2>
-            </div>
-            <p className="text-blue-100 text-lg">Hospital Geral de Palmas - Visão geral em tempo real</p>
-
-            <div className="flex flex-wrap gap-3 mt-6">
-              <Button asChild className="bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/30">
-                <Link href="/pacientes/novo">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Novo Paciente
-                </Link>
-              </Button>
-              <Button asChild className="bg-white/20 hover:bg-white/30 backdrop-blur-sm border-white/30">
-                <Link href="/pedidos/novo">
-                  <ClipboardList className="mr-2 h-4 w-4" />
-                  Criar Pedido
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="border-white/50 text-white hover:bg-white/10">
-                <Link href="/agendamentos">
-                  <CalendarCheck className="mr-2 h-4 w-4" />
-                  Ver Agenda
-                </Link>
-              </Button>
-            </div>
+      <div className="p-4 md:p-6 space-y-4">
+        {/* Welcome & Time */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-800">{greeting()}! 👋</h2>
+            <p className="text-slate-500">
+              {currentTime.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-slate-600">
+            <Clock className="h-5 w-5" />
+            <span className="text-xl font-semibold">
+              {currentTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
         </div>
 
-        {/* Stats Cards Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Pedidos Pendentes */}
-          <Card className="group hover:shadow-xl transition-all duration-300 border-l-4 border-l-orange-500 hover:scale-[1.02]">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">
-                Pedidos Pendentes
-              </CardTitle>
-              <div className="p-2 bg-orange-100 rounded-lg group-hover:bg-orange-200 transition-colors">
-                <ClipboardList className="h-5 w-5 text-orange-600" />
+        {/* Alerts Section */}
+        {(urgentPending.length > 0 || todayScheduled.length > 0) && (
+          <div className="space-y-2">
+            {urgentPending.length > 0 && (
+              <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800">
+                <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                <span className="flex-1 font-medium">
+                  {urgentPending.length} pedido{urgentPending.length > 1 ? 's' : ''} urgente{urgentPending.length > 1 ? 's' : ''} (P1/P2) aguardando agendamento
+                </span>
+                <Button size="sm" variant="destructive" asChild>
+                  <Link href="/pedidos">Ver Pedidos</Link>
+                </Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-orange-600">
-                {stats?.pendingTotal ?? 0}
+            )}
+            {todayScheduled.length > 0 && (
+              <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-800">
+                <Calendar className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                <span className="flex-1 font-medium">
+                  {todayScheduled.length} exame{todayScheduled.length > 1 ? 's' : ''} agendado{todayScheduled.length > 1 ? 's' : ''} para hoje
+                </span>
+                <Button size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
+                  <Link href="/agendamentos">Ver Agenda</Link>
+                </Button>
               </div>
-              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Aguardando agendamento
-              </p>
-              {urgentPending.length > 0 && (
-                <Badge variant="destructive" className="mt-2">
-                  {urgentPending.length} urgente(s)
-                </Badge>
-              )}
-            </CardContent>
-          </Card>
+            )}
+          </div>
+        )}
 
-          {/* Agendados Hoje */}
-          <Card className="group hover:shadow-xl transition-all duration-300 border-l-4 border-l-blue-500 hover:scale-[1.02]">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">
-                Agendados Hoje
-              </CardTitle>
-              <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors">
-                <Calendar className="h-5 w-5 text-blue-600" />
+        {/* Quick Actions */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Button asChild className="h-auto py-4 bg-blue-600 hover:bg-blue-700 flex-col gap-2">
+            <Link href="/pacientes/novo">
+              <Plus className="h-6 w-6" />
+              <span>Novo Paciente</span>
+            </Link>
+          </Button>
+          <Button asChild className="h-auto py-4 bg-green-600 hover:bg-green-700 flex-col gap-2">
+            <Link href="/pedidos/novo">
+              <ClipboardList className="h-6 w-6" />
+              <span>Criar Pedido</span>
+            </Link>
+          </Button>
+          <Button asChild className="h-auto py-4 bg-amber-500 hover:bg-amber-600 flex-col gap-2">
+            <Link href="/agendamentos">
+              <CalendarCheck className="h-6 w-6" />
+              <span>Ver Agenda</span>
+            </Link>
+          </Button>
+          <Button asChild className="h-auto py-4 bg-purple-600 hover:bg-purple-700 flex-col gap-2">
+            <Link href="/mapa-impressao">
+              <Printer className="h-6 w-6" />
+              <span>Imprimir Mapa</span>
+            </Link>
+          </Button>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Today's Progress */}
+          <Card className="col-span-2">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Timer className="h-5 w-5 text-blue-500" />
+                  <span className="font-medium">Progresso de Hoje</span>
+                </div>
+                <span className="text-2xl font-bold text-blue-600">
+                  {todayCompleted.length}/{todayScheduled.length + todayCompleted.length}
+                </span>
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-blue-600">
-                {stats?.scheduledToday ?? 0}
-              </div>
+              <Progress value={todayProgress} className="h-3" />
               <p className="text-xs text-slate-500 mt-1">
-                Próx. 7 dias: <span className="font-semibold text-blue-600">{stats?.scheduledNext7Days ?? 0}</span>
+                {todayCompleted.length} concluído{todayCompleted.length !== 1 ? 's' : ''} • {todayScheduled.length} pendente{todayScheduled.length !== 1 ? 's' : ''}
               </p>
             </CardContent>
           </Card>
 
-          {/* Capacidade do Dia */}
-          <Card className="group hover:shadow-xl transition-all duration-300 border-l-4 border-l-green-500 hover:scale-[1.02]">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">
-                Capacidade Hoje
-              </CardTitle>
-              <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-200 transition-colors">
-                <TrendingUp className="h-5 w-5 text-green-600" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-green-600">
-                {stats?.usedCapacityToday ?? 0}/{stats?.capacityToday ?? 0}
-              </div>
-              <div className="mt-2">
-                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-green-400 to-green-600 transition-all duration-500"
-                    style={{ width: `${capacityPercentage}%` }}
-                  />
+          {/* Pending Total */}
+          <Card className="border-l-4 border-l-orange-500">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500">Na Fila</p>
+                  <p className="text-3xl font-bold text-orange-600">{pendingOrders.length}</p>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {availableToday} vaga{availableToday !== 1 ? 's' : ''} disponível{availableToday !== 1 ? 'is' : ''}
-                </p>
+                <Clock className="h-8 w-8 text-orange-400" />
               </div>
             </CardContent>
           </Card>
 
-          {/* Total Pacientes */}
-          <Card className="group hover:shadow-xl transition-all duration-300 border-l-4 border-l-indigo-500 hover:scale-[1.02]">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-slate-500">
-                Pacientes Cadastrados
-              </CardTitle>
-              <div className="p-2 bg-indigo-100 rounded-lg group-hover:bg-indigo-200 transition-colors">
-                <Users className="h-5 w-5 text-indigo-600" />
+          {/* Total Patients */}
+          <Card className="border-l-4 border-l-indigo-500">
+            <CardContent className="pt-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500">Pacientes</p>
+                  <p className="text-3xl font-bold text-indigo-600">{stats?.totalPatients ?? 0}</p>
+                </div>
+                <Users className="h-8 w-8 text-indigo-400" />
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-4xl font-bold text-indigo-600">
-                {stats?.totalPatients ?? 0}
-              </div>
-              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                <Stethoscope className="h-3 w-3" />
-                Pacientes ativos
-              </p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Priority Chart */}
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-500" />
-                Pendentes por Prioridade
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {stats?.pendingTotal === 0 ? (
-                <div className="h-[200px] flex items-center justify-center text-slate-400">
-                  <CheckCircle className="h-8 w-8 mr-2" />
-                  Nenhum pedido pendente
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Today's Schedule - Full List */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-blue-500" />
+                  Agenda de Hoje
+                </CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/mapa-impressao">
+                      <Printer className="h-4 w-4 mr-1" />
+                      Mapa
+                    </Link>
+                  </Button>
+                  <Button size="sm" asChild>
+                    <Link href="/agendamentos">
+                      Ver Todos <ChevronRight className="h-4 w-4 ml-1" />
+                    </Link>
+                  </Button>
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={priorityData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={80}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {priorityData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Status Chart */}
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5 text-blue-500" />
-                Distribuição por Status
-              </CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={statusData} layout="vertical">
-                  <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                    {statusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Municipio Chart */}
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5 text-green-500" />
-                Top 5 Municípios (Pendentes)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {municipioData.length === 0 ? (
-                <div className="h-[200px] flex items-center justify-center text-slate-400">
-                  Nenhum dado disponível
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={municipioData}>
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
-                    <YAxis hide />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lists Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Today's Schedule */}
-          <Card className="hover:shadow-lg transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-blue-500" />
-                Agenda de Hoje
-              </CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/agendamentos" className="text-blue-600">
-                  Ver todos <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {todayScheduled.length === 0 ? (
+              {todayScheduled.length === 0 && todayCompleted.length === 0 ? (
                 <div className="text-center py-8 text-slate-400">
                   <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>Nenhum exame agendado para hoje</p>
+                  <Button variant="link" asChild className="mt-2">
+                    <Link href="/pedidos">Agendar pedidos pendentes</Link>
+                  </Button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {todayScheduled.slice(0, 5).map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`} />
-                        <div>
-                          <p className="font-medium text-sm">{order.patient?.nome_completo || 'N/D'}</p>
-                          <p className="text-xs text-slate-500">{order.scheduled_time || 'Horário não definido'}</p>
+                <div className="space-y-2">
+                  {[...todayCompleted, ...todayScheduled]
+                    .sort((a, b) => (a.scheduled_time || '').localeCompare(b.scheduled_time || ''))
+                    .map((order) => {
+                      const isCompleted = order.status === 'Concluido' || order.status === 'Concluído'
+                      return (
+                        <div
+                          key={order.id}
+                          className={`flex items-center justify-between p-3 rounded-lg transition-colors ${isCompleted
+                              ? 'bg-green-50 border border-green-200'
+                              : 'bg-slate-50 hover:bg-slate-100'
+                            }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-12 text-center font-mono font-semibold ${isCompleted ? 'text-green-600' : 'text-slate-700'}`}>
+                              {order.scheduled_time || '--:--'}
+                            </div>
+                            <div className={`w-2 h-8 rounded-full ${PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}`} />
+                            <div>
+                              <p className={`font-medium ${isCompleted ? 'line-through text-green-700' : ''}`}>
+                                {order.patient?.nome_completo || 'N/D'}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <span>{order.tipo_paciente === 'Internado' ? '🏥 INT' : '🚶 AMB'}</span>
+                                {order.necessidade_sedacao === 'Com' && <span>💊 Sedação</span>}
+                                {order.patient?.municipio && <span>📍 {order.patient.municipio}</span>}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {isCompleted ? (
+                              <Badge className="bg-green-500">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Concluído
+                              </Badge>
+                            ) : (
+                              <>
+                                {order.patient?.whatsapp && (
+                                  <Button size="sm" variant="ghost" asChild>
+                                    <a href={`https://wa.me/55${order.patient.whatsapp.replace(/\D/g, '')}`} target="_blank">
+                                      <Phone className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                )}
+                                <Button size="sm" variant="outline" asChild>
+                                  <Link href={`/pedidos/${order.id}/editar`}>
+                                    Detalhes
+                                  </Link>
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      <Badge variant="outline">
-                        {order.tipo_paciente === 'Internado' ? 'INT' : 'AMB'}
-                      </Badge>
-                    </div>
-                  ))}
+                      )
+                    })}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Urgent Pending */}
-          <Card className="hover:shadow-lg transition-shadow border-l-4 border-l-red-400">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-red-600">
-                <AlertTriangle className="h-5 w-5" />
-                Pedidos Urgentes Pendentes
-              </CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/pedidos" className="text-red-600">
-                  Ver todos <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {urgentPending.length === 0 ? (
-                <div className="text-center py-8 text-green-600">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-2" />
-                  <p>Nenhum pedido urgente pendente!</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {urgentPending.slice(0, 5).map((order) => (
-                    <div key={order.id} className="flex items-center justify-between p-3 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <Badge className={PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}>
-                          P{order.prioridade}
-                        </Badge>
-                        <div>
-                          <p className="font-medium text-sm">{order.patient?.nome_completo || 'N/D'}</p>
-                          <p className="text-xs text-slate-500">{order.patient?.municipio || 'Município não informado'}</p>
+          {/* Right Column */}
+          <div className="space-y-4">
+            {/* Priority Breakdown */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  Fila por Prioridade
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {pendingOrders.length === 0 ? (
+                  <div className="text-center py-4 text-green-600">
+                    <CheckCircle className="h-8 w-8 mx-auto mb-2" />
+                    <p className="text-sm">Nenhum pedido pendente!</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-4">
+                    <div className="w-24 h-24">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={priorityData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={20}
+                            outerRadius={40}
+                            dataKey="value"
+                          >
+                            {priorityData.map((_, index) => (
+                              <Cell key={`cell-${index}`} fill={CHART_COLORS[index]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      {[1, 2, 3, 4].map(p => (
+                        <div key={p} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-3 h-3 rounded-full ${PRIORITY_COLORS[p as 1 | 2 | 3 | 4]}`} />
+                            <span>P{p}</span>
+                          </div>
+                          <span className="font-semibold">{priorityBreakdown[p] || 0}</span>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Urgent Pending Quick List */}
+            {urgentPending.length > 0 && (
+              <Card className="border-l-4 border-l-red-500">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2 text-red-600">
+                    <Bell className="h-4 w-4" />
+                    Urgentes Pendentes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {urgentPending.slice(0, 4).map((order) => (
+                      <div key={order.id} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                        <div className="flex items-center gap-2">
+                          <Badge className={PRIORITY_COLORS[order.prioridade as 1 | 2 | 3 | 4]}>
+                            P{order.prioridade}
+                          </Badge>
+                          <span className="text-sm truncate max-w-[120px]">
+                            {order.patient?.nome_completo || 'N/D'}
+                          </span>
+                        </div>
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/pedidos/${order.id}/editar`}>
+                            <ArrowRight className="h-4 w-4" />
+                          </Link>
+                        </Button>
                       </div>
-                      <Button size="sm" variant="outline" asChild>
-                        <Link href={`/pedidos/${order.id}/editar`}>
-                          Agendar
+                    ))}
+                    {urgentPending.length > 4 && (
+                      <Button variant="link" size="sm" asChild className="w-full">
+                        <Link href="/pedidos">
+                          Ver mais {urgentPending.length - 4}...
                         </Link>
                       </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Quick Links */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-slate-500" />
+                  Acesso Rápido
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Button variant="outline" className="w-full justify-start" asChild>
+                  <Link href="/pedidos">
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    Gerenciar Pedidos
+                    <Badge variant="secondary" className="ml-auto">{pendingOrders.length}</Badge>
+                  </Link>
+                </Button>
+                <Button variant="outline" className="w-full justify-start" asChild>
+                  <Link href="/pacientes">
+                    <Users className="h-4 w-4 mr-2" />
+                    Lista de Pacientes
+                  </Link>
+                </Button>
+                <Button variant="outline" className="w-full justify-start" asChild>
+                  <Link href="/relatorios">
+                    <FileText className="h-4 w-4 mr-2" />
+                    Relatórios
+                  </Link>
+                </Button>
+                <Button variant="outline" className="w-full justify-start" asChild>
+                  <Link href="/arquivados">
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Arquivados
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </>

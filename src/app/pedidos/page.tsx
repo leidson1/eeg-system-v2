@@ -112,10 +112,18 @@ export default function PedidosPage() {
     }
 
     const filteredOrders = orders.filter(order => {
+        const searchLower = searchTerm.toLowerCase()
         const patientName = order.patient?.nome_completo || ''
+        const municipio = order.patient?.municipio || ''
+
+        // Busca em todos os campos relevantes
         const matchesSearch = searchTerm === '' ||
-            patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (order.medico_solicitante || '').toLowerCase().includes(searchTerm.toLowerCase())
+            patientName.toLowerCase().includes(searchLower) ||
+            municipio.toLowerCase().includes(searchLower) ||
+            (order.medico_solicitante || '').toLowerCase().includes(searchLower) ||
+            order.tipo_paciente.toLowerCase().includes(searchLower) ||
+            order.necessidade_sedacao.toLowerCase().includes(searchLower) ||
+            order.id.toLowerCase().includes(searchLower)
 
         const matchesStatus = statusFilter === 'all' || order.status === statusFilter
         const matchesPriority = priorityFilter === 'all' || order.prioridade.toString() === priorityFilter
@@ -134,7 +142,7 @@ export default function PedidosPage() {
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                             <Input
-                                placeholder="Buscar por paciente ou solicitante..."
+                                placeholder="Buscar por paciente, município, médico..."
                                 className="pl-10"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}

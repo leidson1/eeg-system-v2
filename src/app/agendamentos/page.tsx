@@ -14,7 +14,7 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { CalendarCheck, Plus, CheckCircle, XCircle, Printer, Loader2 } from 'lucide-react'
+import { CalendarCheck, Plus, CheckCircle, XCircle, Printer, Loader2, Search } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -34,6 +34,7 @@ export default function AgendamentosPage() {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
     const [orders, setOrders] = useState<ScheduledOrder[]>([])
     const [loading, setLoading] = useState(false)
+    const [searchTerm, setSearchTerm] = useState('')
 
     const formattedDate = new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
@@ -91,12 +92,24 @@ export default function AgendamentosPage() {
         }
     }
 
+    // Filtro dos agendamentos
+    const filteredOrders = orders.filter(order => {
+        const searchLower = searchTerm.toLowerCase()
+        if (!searchTerm) return true
+        return (
+            (order.patient?.nome_completo || '').toLowerCase().includes(searchLower) ||
+            (order.patient?.municipio || '').toLowerCase().includes(searchLower) ||
+            order.tipo_paciente.toLowerCase().includes(searchLower) ||
+            order.necessidade_sedacao.toLowerCase().includes(searchLower)
+        )
+    })
+
     return (
         <>
             <AppHeader title="Agendamentos" />
 
             <div className="p-6 space-y-6">
-                {/* Date Selector */}
+                {/* Date Selector and Search */}
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex flex-wrap gap-4 items-end">
@@ -108,6 +121,15 @@ export default function AgendamentosPage() {
                                     value={selectedDate}
                                     onChange={(e) => setSelectedDate(e.target.value)}
                                     className="w-[200px]"
+                                />
+                            </div>
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar por paciente, município..."
+                                    className="pl-10"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                             </div>
                             <div className="flex gap-2">
@@ -141,7 +163,7 @@ export default function AgendamentosPage() {
                     <div>
                         <h2 className="text-xl font-semibold capitalize">{formattedDate}</h2>
                         <p className="text-sm text-slate-500">
-                            {orders.length} paciente(s) agendado(s)
+                            {filteredOrders.length} paciente(s) {searchTerm ? 'encontrado(s)' : 'agendado(s)'}
                         </p>
                     </div>
                 </div>
@@ -151,7 +173,7 @@ export default function AgendamentosPage() {
                     <CalendarCheck className="h-5 w-5 text-blue-600" />
                     <div className="text-sm">
                         <span className="font-medium text-blue-900">Agenda do dia: </span>
-                        <span className="text-blue-700">{orders.length} paciente(s) agendado(s)</span>
+                        <span className="text-blue-700">{orders.length} agendado(s){searchTerm && filteredOrders.length < orders.length ? `, ${filteredOrders.length} filtrado(s)` : ''}</span>
                     </div>
                 </div>
 
@@ -179,14 +201,14 @@ export default function AgendamentosPage() {
                                             <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
                                         </TableCell>
                                     </TableRow>
-                                ) : orders.length === 0 ? (
+                                ) : filteredOrders.length === 0 ? (
                                     <TableRow>
                                         <TableCell colSpan={6} className="text-center py-8 text-slate-500">
-                                            Nenhum paciente agendado para este dia.
+                                            {searchTerm ? 'Nenhum resultado para a busca.' : 'Nenhum paciente agendado para este dia.'}
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    orders.map((item, idx) => (
+                                    filteredOrders.map((item, idx) => (
                                         <TableRow key={item.id} className="hover:bg-slate-50">
                                             <TableCell className="font-medium">Slot {idx + 1}</TableCell>
                                             <TableCell>{item.patient?.nome_completo || 'N/D'}</TableCell>
