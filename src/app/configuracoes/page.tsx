@@ -14,24 +14,22 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Plus, Trash2, Save, Download, Upload, Users, Calendar } from 'lucide-react'
-import { useState } from 'react'
+import { Plus, Trash2, Save, Download, Upload, Users, Calendar, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
+import Link from 'next/link'
 
-// Dados de demonstração
-const mockTeam = {
-    medicos: ['Dra. Graziela Schiavoni', 'Dr. Carlos Mendes'],
-    enfermeiros: ['Lucy Pinheiro'],
-    tecnicos: ['Iolanda Alves'],
-    solicitantes: ['Dr. Ricardo Alves', 'Dra. Fernanda Lima', 'Dr. Marcos Costa'],
+interface TeamMember {
+    id: string
+    name: string
+    role: string
 }
 
-const mockCapacity = [
-    { date: '2026-01-06', capacity: 4 },
-    { date: '2026-01-07', capacity: 4 },
-    { date: '2026-01-08', capacity: 0 },
-    { date: '2026-01-09', capacity: 4 },
-    { date: '2026-01-10', capacity: 3 },
-]
+interface CapacityConfig {
+    id: string
+    date: string
+    capacity: number
+}
 
 function formatDate(dateStr: string): string {
     const date = new Date(dateStr + 'T00:00:00')
@@ -40,7 +38,159 @@ function formatDate(dateStr: string): string {
 
 export default function ConfiguracoesPage() {
     const [newDate, setNewDate] = useState('')
-    const [newCapacity, setNewCapacity] = useState('')
+    const [newCapacity, setNewCapacity] = useState('4')
+    const [capacityList, setCapacityList] = useState<CapacityConfig[]>([])
+    const [loadingCapacity, setLoadingCapacity] = useState(true)
+    const [savingCapacity, setSavingCapacity] = useState(false)
+
+    // Team state
+    const [medicos, setMedicos] = useState<string[]>([])
+    const [enfermeiros, setEnfermeiros] = useState<string[]>([])
+    const [tecnicos, setTecnicos] = useState<string[]>([])
+    const [solicitantes, setSolicitantes] = useState<string[]>([])
+    const [newMember, setNewMember] = useState('')
+
+    // Set default date to today
+    useEffect(() => {
+        setNewDate(new Date().toISOString().split('T')[0])
+        // Simulate loading capacity from localStorage or API
+        const saved = localStorage.getItem('eeg_capacity_config')
+        if (saved) {
+            setCapacityList(JSON.parse(saved))
+        }
+        setLoadingCapacity(false)
+
+        // Load team from localStorage
+        const savedTeam = localStorage.getItem('eeg_team_config')
+        if (savedTeam) {
+            const team = JSON.parse(savedTeam)
+            if (team.medicos) setMedicos(team.medicos)
+            if (team.enfermeiros) setEnfermeiros(team.enfermeiros)
+            if (team.tecnicos) setTecnicos(team.tecnicos)
+            if (team.solicitantes) setSolicitantes(team.solicitantes)
+        }
+    }, [])
+
+    const handleAddCapacity = () => {
+        if (!newDate) {
+            toast.error('Selecione uma data')
+            return
+        }
+        const capacity = parseInt(newCapacity) || 0
+
+        // Check if date already exists
+        if (capacityList.some(c => c.date === newDate)) {
+            toast.error('Esta data já foi configurada')
+            return
+        }
+
+        const newConfig: CapacityConfig = {
+            id: Date.now().toString(),
+            date: newDate,
+            capacity
+        }
+
+        const updated = [...capacityList, newConfig].sort((a, b) =>
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+        )
+        setCapacityList(updated)
+        localStorage.setItem('eeg_capacity_config', JSON.stringify(updated))
+        toast.success('Capacidade adicionada!')
+
+        // Move date to next day
+        const nextDay = new Date(newDate)
+        nextDay.setDate(nextDay.getDate() + 1)
+        setNewDate(nextDay.toISOString().split('T')[0])
+    }
+
+    const handleDeleteCapacity = (id: string) => {
+        const updated = capacityList.filter(c => c.id !== id)
+        setCapacityList(updated)
+        localStorage.setItem('eeg_capacity_config', JSON.stringify(updated))
+        toast.success('Capacidade removida')
+    }
+
+    const handleAddTeamMember = (type: 'medicos' | 'enfermeiros' | 'tecnicos' | 'solicitantes') => {
+        const name = prompt('Digite o nome:')
+        if (!name) return
+
+        switch (type) {
+            case 'medicos':
+                setMedicos([...medicos, name])
+                break
+            case 'enfermeiros':
+                setEnfermeiros([...enfermeiros, name])
+                break
+            case 'tecnicos':
+                setTecnicos([...tecnicos, name])
+                break
+            case 'solicitantes':
+                setSolicitantes([...solicitantes, name])
+                break
+        }
+        toast.success('Membro adicionado!')
+    }
+
+    const handleRemoveTeamMember = (type: 'medicos' | 'enfermeiros' | 'tecnicos' | 'solicitantes', index: number) => {
+        if (!confirm('Deseja remover este membro?')) return
+
+        switch (type) {
+            case 'medicos':
+                setMedicos(medicos.filter((_, i) => i !== index))
+                break
+            case 'enfermeiros':
+                setEnfermeiros(enfermeiros.filter((_, i) => i !== index))
+                break
+            case 'tecnicos':
+                setTecnicos(tecnicos.filter((_, i) => i !== index))
+                break
+            case 'solicitantes':
+                setSolicitantes(solicitantes.filter((_, i) => i !== index))
+                break
+        }
+        toast.success('Membro removido')
+    }
+
+    const handleSaveTeam = () => {
+        const teamData = { medicos, enfermeiros, tecnicos, solicitantes }
+        localStorage.setItem('eeg_team_config', JSON.stringify(teamData))
+        toast.success('Equipe salva com sucesso!')
+    }
+
+    const handleExportBackup = async () => {
+        try {
+            const response = await fetch('/api/pacientes')
+            const patients = await response.json()
+
+            const ordersResponse = await fetch('/api/pedidos')
+            const orders = await ordersResponse.json()
+
+            const backup = {
+                exportedAt: new Date().toISOString(),
+                patients,
+                orders,
+                team: { medicos, enfermeiros, tecnicos, solicitantes },
+                capacity: capacityList,
+            }
+
+            const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `backup-eeg-${new Date().toISOString().split('T')[0]}.json`
+            a.click()
+            URL.revokeObjectURL(url)
+
+            toast.success('Backup exportado com sucesso!')
+        } catch (error) {
+            toast.error('Erro ao exportar backup')
+            console.error(error)
+        }
+    }
+
+    const handleImportBackup = () => {
+        toast.info('Para importar dados, acesse a página Admin (/admin)')
+    }
 
     return (
         <>
@@ -92,7 +242,7 @@ export default function ConfiguracoesPage() {
                                             className="w-[120px]"
                                         />
                                     </div>
-                                    <Button>
+                                    <Button onClick={handleAddCapacity}>
                                         <Plus className="mr-2 h-4 w-4" />
                                         Adicionar
                                     </Button>
@@ -108,25 +258,39 @@ export default function ConfiguracoesPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {mockCapacity.map((item) => (
-                                                <TableRow key={item.date}>
-                                                    <TableCell>{formatDate(item.date)}</TableCell>
-                                                    <TableCell className="text-center">{item.capacity}</TableCell>
-                                                    <TableCell className="text-right">
-                                                        <Button variant="ghost" size="sm" className="text-red-600">
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
+                                            {loadingCapacity ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center py-8">
+                                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
                                                     </TableCell>
                                                 </TableRow>
-                                            ))}
+                                            ) : capacityList.length === 0 ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={3} className="text-center py-8 text-slate-500">
+                                                        Nenhuma capacidade configurada.
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : (
+                                                capacityList.map((item) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell>{formatDate(item.date)}</TableCell>
+                                                        <TableCell className="text-center">{item.capacity}</TableCell>
+                                                        <TableCell className="text-right">
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="text-red-600"
+                                                                onClick={() => handleDeleteCapacity(item.id)}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            )}
                                         </TableBody>
                                     </Table>
                                 </div>
-
-                                <Button>
-                                    <Save className="mr-2 h-4 w-4" />
-                                    Salvar Alterações
-                                </Button>
                             </CardContent>
                         </Card>
                     </TabsContent>
@@ -140,15 +304,24 @@ export default function ConfiguracoesPage() {
                                     <CardTitle className="text-lg">Médica(s) Executora(s)</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {mockTeam.medicos.map((name, index) => (
+                                    {medicos.map((name, index) => (
                                         <div key={index} className="flex items-center gap-2">
                                             <Input value={name} readOnly className="flex-1" />
-                                            <Button variant="ghost" size="sm" className="text-red-600">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-600"
+                                                onClick={() => handleRemoveTeamMember('medicos', index)}
+                                            >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     ))}
-                                    <Button variant="outline" className="w-full">
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => handleAddTeamMember('medicos')}
+                                    >
                                         <Plus className="mr-2 h-4 w-4" />
                                         Adicionar Médica
                                     </Button>
@@ -161,15 +334,24 @@ export default function ConfiguracoesPage() {
                                     <CardTitle className="text-lg">Enfermeira(s)</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {mockTeam.enfermeiros.map((name, index) => (
+                                    {enfermeiros.map((name, index) => (
                                         <div key={index} className="flex items-center gap-2">
                                             <Input value={name} readOnly className="flex-1" />
-                                            <Button variant="ghost" size="sm" className="text-red-600">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-600"
+                                                onClick={() => handleRemoveTeamMember('enfermeiros', index)}
+                                            >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     ))}
-                                    <Button variant="outline" className="w-full">
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => handleAddTeamMember('enfermeiros')}
+                                    >
                                         <Plus className="mr-2 h-4 w-4" />
                                         Adicionar Enfermeira
                                     </Button>
@@ -182,15 +364,24 @@ export default function ConfiguracoesPage() {
                                     <CardTitle className="text-lg">Técnica(s)</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {mockTeam.tecnicos.map((name, index) => (
+                                    {tecnicos.map((name, index) => (
                                         <div key={index} className="flex items-center gap-2">
                                             <Input value={name} readOnly className="flex-1" />
-                                            <Button variant="ghost" size="sm" className="text-red-600">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-red-600"
+                                                onClick={() => handleRemoveTeamMember('tecnicos', index)}
+                                            >
                                                 <Trash2 className="h-4 w-4" />
                                             </Button>
                                         </div>
                                     ))}
-                                    <Button variant="outline" className="w-full">
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => handleAddTeamMember('tecnicos')}
+                                    >
                                         <Plus className="mr-2 h-4 w-4" />
                                         Adicionar Técnica
                                     </Button>
@@ -203,15 +394,30 @@ export default function ConfiguracoesPage() {
                                     <CardTitle className="text-lg">Médicos Solicitantes</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {mockTeam.solicitantes.map((name, index) => (
-                                        <div key={index} className="flex items-center gap-2">
-                                            <Input value={name} readOnly className="flex-1" />
-                                            <Button variant="ghost" size="sm" className="text-red-600">
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                    <Button variant="outline" className="w-full">
+                                    {solicitantes.length === 0 ? (
+                                        <p className="text-sm text-slate-500 text-center py-4">
+                                            Nenhum solicitante cadastrado
+                                        </p>
+                                    ) : (
+                                        solicitantes.map((name, index) => (
+                                            <div key={index} className="flex items-center gap-2">
+                                                <Input value={name} readOnly className="flex-1" />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="text-red-600"
+                                                    onClick={() => handleRemoveTeamMember('solicitantes', index)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))
+                                    )}
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        onClick={() => handleAddTeamMember('solicitantes')}
+                                    >
                                         <Plus className="mr-2 h-4 w-4" />
                                         Adicionar Solicitante
                                     </Button>
@@ -219,7 +425,7 @@ export default function ConfiguracoesPage() {
                             </Card>
                         </div>
 
-                        <Button className="bg-blue-600">
+                        <Button className="bg-blue-600" onClick={handleSaveTeam}>
                             <Save className="mr-2 h-4 w-4" />
                             Salvar Equipe
                         </Button>
@@ -237,24 +443,38 @@ export default function ConfiguracoesPage() {
                             <CardContent className="space-y-4">
                                 <div className="p-4 bg-slate-50 rounded-lg">
                                     <p className="text-sm">
-                                        <span className="font-medium">Último backup:</span>{' '}
-                                        <span className="text-slate-600">Nunca</span>
+                                        <span className="font-medium">Dica:</span>{' '}
+                                        <span className="text-slate-600">
+                                            Os dados são armazenados no Supabase na nuvem.
+                                        </span>
                                     </p>
                                 </div>
 
                                 <div className="flex gap-4">
-                                    <Button className="bg-green-600 hover:bg-green-700">
+                                    <Button
+                                        className="bg-green-600 hover:bg-green-700"
+                                        onClick={handleExportBackup}
+                                    >
                                         <Download className="mr-2 h-4 w-4" />
                                         Exportar Dados (Backup)
                                     </Button>
-                                    <Button variant="outline" className="border-orange-300 text-orange-600 hover:bg-orange-50">
-                                        <Upload className="mr-2 h-4 w-4" />
-                                        Importar Dados (Restaurar)
+                                    <Button
+                                        variant="outline"
+                                        className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                                        asChild
+                                    >
+                                        <Link href="/admin">
+                                            <Upload className="mr-2 h-4 w-4" />
+                                            Importar Dados (Admin)
+                                        </Link>
                                     </Button>
                                 </div>
 
-                                <p className="text-sm text-red-600">
-                                    <strong>Atenção:</strong> Importar dados substituirá TODOS os dados atuais do sistema.
+                                <p className="text-sm text-slate-500">
+                                    Para importar dados ou migrar do sistema antigo, acesse a{' '}
+                                    <Link href="/admin" className="text-blue-600 underline">
+                                        página de Administração
+                                    </Link>.
                                 </p>
                             </CardContent>
                         </Card>

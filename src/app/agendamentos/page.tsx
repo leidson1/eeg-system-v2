@@ -111,11 +111,17 @@ export default function AgendamentosPage() {
                                 />
                             </div>
                             <div className="flex gap-2">
-                                <Button variant="outline">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => toast.info('Para agendar, vá em Pedidos > Clique no ícone de calendário')}
+                                >
                                     <Plus className="mr-2 h-4 w-4" />
                                     Preencher Eletiva
                                 </Button>
-                                <Button variant="outline">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => toast.info('Para adicionar internado, crie um pedido com tipo "Internado"')}
+                                >
                                     <Plus className="mr-2 h-4 w-4" />
                                     Adicionar Internado
                                 </Button>

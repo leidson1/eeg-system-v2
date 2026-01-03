@@ -12,47 +12,78 @@ import {
     TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { Search, Undo2, Eye } from 'lucide-react'
-import { useState } from 'react'
+import { Search, Undo2, Eye, Loader2 } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { toast } from 'sonner'
 import { PRIORITY_DESCRIPTIONS } from '@/types'
+import Link from 'next/link'
 
-// Dados de demonstração
-const mockArchived = [
-    {
-        id: '1',
-        patient_name: 'Maria Eduarda Costa',
-        data_pedido: '2025-11-15',
-        archived_at: '2025-12-20',
-        prioridade: 3,
-        necessidade_sedacao: 'Sem',
-        tipo_paciente: 'Ambulatorio',
-        medico_solicitante: 'Dr. José Almeida',
-    },
-    {
-        id: '2',
-        patient_name: 'Pedro Henrique Lima',
-        data_pedido: '2025-10-20',
-        archived_at: '2025-11-30',
-        prioridade: 2,
-        necessidade_sedacao: 'Com',
-        tipo_paciente: 'Internado',
-        medico_solicitante: 'Dra. Ana Paula',
-    },
-]
+interface ArchivedOrder {
+    id: string
+    patient_id: string
+    data_pedido: string
+    archived_at: string | null
+    prioridade: number
+    necessidade_sedacao: string
+    tipo_paciente: string
+    medico_solicitante: string | null
+    patient: {
+        nome_completo: string
+    } | null
+}
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string | null): string {
+    if (!dateStr) return '-'
     const date = new Date(dateStr + 'T00:00:00')
     return date.toLocaleDateString('pt-BR')
 }
 
 export default function ArquivadosPage() {
+    const [orders, setOrders] = useState<ArchivedOrder[]>([])
+    const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
 
-    const filteredArchived = mockArchived.filter(order => {
+    useEffect(() => {
+        fetchArchivedOrders()
+    }, [])
+
+    const fetchArchivedOrders = async () => {
+        try {
+            const response = await fetch('/api/pedidos?archived=true')
+            if (!response.ok) throw new Error('Erro ao carregar')
+            const data = await response.json()
+            setOrders(data)
+        } catch (error) {
+            toast.error('Erro ao carregar pedidos arquivados')
+            console.error(error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleUnarchive = async (id: string) => {
+        if (!confirm('Deseja desarquivar este pedido? Ele voltará para a lista de pedidos.')) return
+
+        try {
+            const response = await fetch(`/api/pedidos/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ archived: false, archived_at: null })
+            })
+            if (!response.ok) throw new Error('Erro ao desarquivar')
+            toast.success('Pedido desarquivado com sucesso!')
+            fetchArchivedOrders()
+        } catch (error) {
+            toast.error('Erro ao desarquivar pedido')
+            console.error(error)
+        }
+    }
+
+    const filteredArchived = orders.filter(order => {
+        const patientName = order.patient?.nome_completo || ''
         return searchTerm === '' ||
-            order.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.medico_solicitante.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.id.includes(searchTerm)
+            patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (order.medico_solicitante || '').toLowerCase().includes(searchTerm.toLowerCase())
     })
 
     return (
@@ -64,7 +95,7 @@ export default function ArquivadosPage() {
                 <div className="relative max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                        placeholder="Buscar por nome, solicitante ou ID..."
+                        placeholder="Buscar por nome ou solicitante..."
                         className="pl-10"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -87,7 +118,13 @@ export default function ArquivadosPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filteredArchived.length === 0 ? (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} className="text-center py-8">
+                                        <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
+                                    </TableCell>
+                                </TableRow>
+                            ) : filteredArchived.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={8} className="text-center py-8 text-slate-500">
                                         Nenhum pedido arquivado encontrado.
@@ -96,7 +133,9 @@ export default function ArquivadosPage() {
                             ) : (
                                 filteredArchived.map((order) => (
                                     <TableRow key={order.id} className="hover:bg-slate-50">
-                                        <TableCell className="font-medium">{order.patient_name}</TableCell>
+                                        <TableCell className="font-medium">
+                                            {order.patient?.nome_completo || 'N/D'}
+                                        </TableCell>
                                         <TableCell>{formatDate(order.data_pedido)}</TableCell>
                                         <TableCell>{formatDate(order.archived_at)}</TableCell>
                                         <TableCell>
@@ -111,17 +150,27 @@ export default function ArquivadosPage() {
                                         <TableCell>
                                             {order.tipo_paciente === 'Internado' ? 'INT' : 'AMB'}
                                         </TableCell>
-                                        <TableCell className="text-sm">{order.medico_solicitante}</TableCell>
+                                        <TableCell className="text-sm">
+                                            {order.medico_solicitante || '-'}
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
-                                                <Button variant="ghost" size="sm" title="Ver Detalhes">
-                                                    <Eye className="h-4 w-4" />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Ver Detalhes"
+                                                    asChild
+                                                >
+                                                    <Link href={`/pedidos/${order.id}/editar`}>
+                                                        <Eye className="h-4 w-4" />
+                                                    </Link>
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
                                                     size="sm"
                                                     title="Desarquivar"
                                                     className="text-green-600 hover:text-green-700"
+                                                    onClick={() => handleUnarchive(order.id)}
                                                 >
                                                     <Undo2 className="h-4 w-4" />
                                                 </Button>

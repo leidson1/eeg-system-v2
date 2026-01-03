@@ -273,10 +273,17 @@ export default function PedidosPage() {
                                                         <CalendarCheck className="h-4 w-4" />
                                                     </Button>
                                                 )}
-                                                <Button variant="ghost" size="sm" title="Editar">
-                                                    <Edit className="h-4 w-4" />
+                                                <Button variant="ghost" size="sm" title="Editar" asChild>
+                                                    <Link href={`/pedidos/${order.id}/editar`}>
+                                                        <Edit className="h-4 w-4" />
+                                                    </Link>
                                                 </Button>
-                                                <Button variant="ghost" size="sm" title="Histórico">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Histórico"
+                                                    onClick={() => toast.info('Histórico do pedido - Em desenvolvimento')}
+                                                >
                                                     <History className="h-4 w-4" />
                                                 </Button>
                                                 <Button
