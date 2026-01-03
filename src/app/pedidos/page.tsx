@@ -55,9 +55,12 @@ const statusColors: Record<string, string> = {
 }
 
 export default function PedidosPage() {
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+    const initialSearch = searchParams?.get('paciente') || ''
+
     const [orders, setOrders] = useState<OrderWithPatient[]>([])
     const [loading, setLoading] = useState(true)
-    const [searchTerm, setSearchTerm] = useState('')
+    const [searchTerm, setSearchTerm] = useState(initialSearch)
     const [statusFilter, setStatusFilter] = useState('all')
     const [priorityFilter, setPriorityFilter] = useState('all')
     const [showFilters, setShowFilters] = useState(false)
@@ -286,13 +289,10 @@ export default function PedidosPage() {
                                                         <Edit className="h-4 w-4" />
                                                     </Link>
                                                 </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    title="Histórico"
-                                                    onClick={() => toast.info('Histórico do pedido - Em desenvolvimento')}
-                                                >
-                                                    <History className="h-4 w-4" />
+                                                <Button variant="ghost" size="sm" title="Detalhes" asChild>
+                                                    <Link href={`/pedidos/${order.id}/editar`}>
+                                                        <History className="h-4 w-4" />
+                                                    </Link>
                                                 </Button>
                                                 <Button
                                                     variant="ghost"

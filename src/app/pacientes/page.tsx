@@ -189,13 +189,10 @@ export default function PacientesPage() {
                                                         <Edit className="h-4 w-4" />
                                                     </Link>
                                                 </Button>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    title="Histórico"
-                                                    onClick={() => toast.info(`Histórico de ${patient.nome_completo} - Em desenvolvimento`)}
-                                                >
-                                                    <History className="h-4 w-4" />
+                                                <Button variant="ghost" size="sm" title="Ver Pedidos" asChild>
+                                                    <Link href={`/pedidos?paciente=${patient.nome_completo}`}>
+                                                        <History className="h-4 w-4" />
+                                                    </Link>
                                                 </Button>
                                                 <Button
                                                     variant="ghost"

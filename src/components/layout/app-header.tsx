@@ -63,10 +63,11 @@ export function AppHeader({ title }: AppHeaderProps) {
 
             {/* Actions */}
             <div className="flex items-center gap-4">
-                {/* Notifications - placeholder */}
+                {/* Notifications - comentado até implementação futura
                 <Button variant="ghost" size="icon" className="relative" onClick={() => toast.info('Notificações em desenvolvimento')}>
                     <Bell className="h-5 w-5 text-slate-600" />
                 </Button>
+                */}
 
                 {/* User Menu */}
                 <DropdownMenu>

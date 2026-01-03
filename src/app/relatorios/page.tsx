@@ -83,13 +83,13 @@ export default function RelatoriosPage() {
         medicos: true,
     })
 
-    // Set default dates (current month)
+    // Set default dates (last 12 months to capture historical data)
     useEffect(() => {
         const now = new Date()
-        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1)
+        const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), 1)
         const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0)
 
-        setStartDate(firstDay.toISOString().split('T')[0])
+        setStartDate(oneYearAgo.toISOString().split('T')[0])
         setEndDate(lastDay.toISOString().split('T')[0])
     }, [])
 

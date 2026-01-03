@@ -46,6 +46,13 @@ interface LegacyOrder {
     scheduledDate?: string
     scheduledTime?: string
     dataConclusao?: string
+    // Campos de execução (quem executou o exame)
+    executedBy_doctors?: string[]
+    executedBy_nurses?: string[]
+    executedBy_technicians?: string[]
+    // Flag para pedidos arquivados
+    isArchived?: boolean
+    dataArquivamento?: string
 }
 
 interface LegacyBackup {
@@ -102,6 +109,8 @@ export default function MigratePage() {
             orderStatus = 'Agendado'
         } else if (legacy.status === 'Cancelado') {
             orderStatus = 'Cancelado'
+        } else if (legacy.status === 'Arquivado') {
+            orderStatus = 'Concluido' // Arquivados geralmente são concluídos
         }
 
         const tipoPaciente = legacy.tipoPaciente === 'Internado' ? 'Internado' : 'Ambulatorio'
@@ -120,6 +129,12 @@ export default function MigratePage() {
             scheduled_date: legacy.scheduledDate || null,
             scheduled_time: legacy.scheduledTime || null,
             data_conclusao: legacy.dataConclusao || null,
+            // Campos de execução - preserva quem executou o exame (nomes em português conforme schema)
+            executado_por_medicos: legacy.executedBy_doctors || null,
+            executado_por_enfermeiras: legacy.executedBy_nurses || null,
+            executado_por_tecnicos: legacy.executedBy_technicians || null,
+            // Marca como arquivado se veio de archivedOrders
+            archived_at: legacy.isArchived ? (legacy.dataArquivamento || new Date().toISOString()) : null,
         }
     }
 
@@ -144,19 +159,33 @@ export default function MigratePage() {
 
             // Find orders - might be under different key
             let orders: LegacyOrder[] = []
+            let archivedOrders: LegacyOrder[] = []
             const backupObj = backup as unknown as Record<string, unknown>
             const keys = Object.keys(backupObj)
+
             for (const key of keys) {
                 if (key !== 'patients' && Array.isArray(backupObj[key])) {
                     const arr = backupObj[key] as LegacyOrder[]
                     if (arr.length > 0 && arr[0].patientId !== undefined) {
-                        orders = arr
-                        break
+                        if (key === 'archivedOrders') {
+                            archivedOrders = arr
+                        } else if (key === 'orders' || key === 'pedidos') {
+                            orders = arr
+                        } else if (orders.length === 0) {
+                            // Fallback for other keys with order-like structure
+                            orders = arr
+                        }
                     }
                 }
             }
 
-            console.log(`Encontrados ${patients.length} pacientes e ${orders.length} pedidos`)
+            // Combine orders and archived orders (marking archived ones)
+            const allOrders = [
+                ...orders,
+                ...archivedOrders.map(o => ({ ...o, isArchived: true }))
+            ]
+
+            console.log(`Encontrados ${patients.length} pacientes, ${orders.length} pedidos e ${archivedOrders.length} arquivados`)
 
             const patientResults = { success: 0, errors: 0 }
             const orderResults = { success: 0, errors: 0 }
@@ -209,10 +238,12 @@ export default function MigratePage() {
             // ==========================================
             // FASE 2: IMPORTAR PEDIDOS
             // ==========================================
-            setStatus(`Importando ${orders.length} pedidos...`)
+            // FASE 2: IMPORTAR PEDIDOS (ativos + arquivados)
+            // ==========================================
+            setStatus(`Importando ${allOrders.length} pedidos (${orders.length} ativos + ${archivedOrders.length} arquivados)...`)
 
-            for (let i = 0; i < orders.length; i++) {
-                const legacyOrder = orders[i]
+            for (let i = 0; i < allOrders.length; i++) {
+                const legacyOrder = allOrders[i]
                 const newPatientId = patientIdMapRef.current.get(legacyOrder.patientId)
 
                 if (!newPatientId) {
@@ -241,8 +272,8 @@ export default function MigratePage() {
 
                 // Atualizar progresso a cada 10 pedidos
                 if (i % 10 === 0) {
-                    setProgress(50 + Math.round((i / orders.length) * 50))
-                    setStatus(`Importando pedidos... ${i + 1}/${orders.length}`)
+                    setProgress(50 + Math.round((i / allOrders.length) * 50))
+                    setStatus(`Importando pedidos... ${i + 1}/${allOrders.length}`)
                 }
 
                 // Pequena pausa a cada 20 para evitar rate limiting
