@@ -41,10 +41,12 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // If user is not signed in and trying to access protected routes
+    // Allow access to login, auth, and admin pages without authentication
     if (
         !user &&
         !request.nextUrl.pathname.startsWith('/login') &&
-        !request.nextUrl.pathname.startsWith('/auth')
+        !request.nextUrl.pathname.startsWith('/auth') &&
+        !request.nextUrl.pathname.startsWith('/admin')
     ) {
         const url = request.nextUrl.clone()
         url.pathname = '/login'
